@@ -513,7 +513,7 @@
   </div>
 </div>
 <div class="app-shell" id="appShell" style="display:none;">
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebarEl">
     <div class="side-brand">
       <div class="side-logo">IL</div>
       <div>
@@ -1183,10 +1183,22 @@ function renderNoticeBanner(){
 
 function applyLockedView(){
   const student = students.find(s => s.id === lockedStudentId);
+
+  // 학생/학부모 링크로 접속한 경우, 사이드바(원장 전용 메뉴)를 완전히 숨겨서
+  // 해당 학생/학부모가 다른 학생 정보나 관리자 화면으로 이동할 수 없게 합니다.
+  const sidebarEl = document.getElementById('sidebarEl');
+  if(sidebarEl) sidebarEl.style.display = 'none';
+
   document.getElementById('homeView').style.display = 'none';
   document.getElementById('teacherView').style.display = 'none';
   document.getElementById('parentView').style.display = 'none';
   document.getElementById('studentView').style.display = 'none';
+  document.getElementById('settingsView').style.display = 'none';
+  document.getElementById('scheduleView').style.display = 'none';
+  document.getElementById('reportView').style.display = 'none';
+  document.getElementById('plannerView').style.display = 'none';
+  document.getElementById('qnaView').style.display = 'none';
+  document.getElementById('classView').style.display = 'none';
 
   const viewId = lockedRole === 'student' ? 'studentView' : 'parentView';
   document.getElementById(viewId).style.display = '';
@@ -2471,6 +2483,9 @@ function classCommentsForStudentHtml(studentId){
 loadAll();
 
 function setMode(mode){
+  // 학생/학부모 전용 링크(?student=...)로 들어온 경우, 원장님 전용 화면으로는
+  // 어떤 경로로도 전환되지 않도록 막습니다.
+  if(lockedStudentId) return;
   const homeView = document.getElementById('homeView');
   const teacherView = document.getElementById('teacherView');
   const parentView = document.getElementById('parentView');
