@@ -1,0 +1,2911 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>출결부 — 수학 클래스 관리</title>
+<style>
+  @import url('https://cdnjs.cloudflare.com/ajax/libs/Pretendard/1.3.9/static/pretendard.css');
+
+  :root{
+    --bg: #F6F5F1;
+    --ink: #1C2333;
+    --ink-soft: #5B6378;
+    --line: #DAD7CD;
+    --paper: #FFFFFF;
+    --good: #2F6B4F;
+    --good-bg: #E7F1EA;
+    --warn: #B5651D;
+    --warn-bg: #FBEADF;
+    --absent: #A3324A;
+    --absent-bg: #F8E6EA;
+    --accent: #A8D8F0;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Pretendard', -apple-system, sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{ max-width:920px; margin:0 auto; padding:28px 20px 80px; }
+
+  header{
+    display:flex; justify-content:space-between; align-items:flex-end;
+    border-bottom:2px solid var(--ink);
+    padding-bottom:16px; margin-bottom:24px;
+  }
+  header h1{
+    font-size:22px; font-weight:800; letter-spacing:-0.02em; margin:0;
+  }
+  header .date{
+    font-size:13px; color:var(--ink-soft); font-variant-numeric:tabular-nums;
+  }
+
+  .hw-card{
+    background:var(--paper); border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; margin-bottom:20px;
+  }
+  .hw-card label{ font-size:12px; font-weight:700; color:var(--ink-soft); display:block; margin-bottom:6px; }
+  .hw-card input{
+    width:100%; border:none; font-size:15px; font-family:inherit; color:var(--ink);
+    padding:6px 0; border-bottom:1px solid var(--line); outline:none; background:transparent;
+  }
+  .hw-card input:focus{ border-bottom-color:var(--accent); }
+
+  .toolbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .toolbar .count{ font-size:12px; color:var(--ink-soft); }
+  .add-btn{
+    background:var(--accent); color:#fff; border:none; border-radius:7px;
+    font-size:13px; font-weight:600; padding:7px 13px; cursor:pointer;
+  }
+  .add-btn:hover{ opacity:0.9; }
+
+  table.roster{ width:100%; border-collapse:collapse; background:var(--paper); border-radius:10px; overflow:hidden; border:1px solid var(--line); }
+  table.roster th{
+    text-align:left; font-size:11px; color:var(--ink-soft); font-weight:700;
+    padding:10px 12px; border-bottom:1px solid var(--line); background:#FBFAF7;
+    text-transform:uppercase; letter-spacing:0.04em;
+  }
+  table.roster td{ padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:middle; }
+  table.roster tr:last-child td{ border-bottom:none; }
+  .name-cell{ font-weight:700; font-size:14.5px; }
+  .name-cell .del{ font-size:11px; color:var(--ink-soft); cursor:pointer; margin-left:8px; font-weight:400; }
+  .name-cell .del:hover{ color:var(--absent); }
+
+  .pill-group{ display:flex; gap:5px; }
+  .pill{
+    border:1px solid var(--line); background:var(--paper); border-radius:6px;
+    font-size:12px; font-weight:600; padding:5px 9px; cursor:pointer; color:var(--ink-soft);
+    transition:all .12s;
+  }
+  .pill.active.good{ background:var(--good-bg); border-color:var(--good); color:var(--good); }
+  .pill.active.warn{ background:var(--warn-bg); border-color:var(--warn); color:var(--warn); }
+  .pill.active.absent{ background:var(--absent-bg); border-color:var(--absent); color:var(--absent); }
+
+  .history{ display:flex; gap:3px; }
+  .dot{
+    width:9px; height:9px; border-radius:2px; background:#E5E3DC;
+  }
+  .dot.good{ background:var(--good); }
+  .dot.warn{ background:var(--warn); }
+  .dot.absent{ background:var(--absent); }
+
+  .empty{ text-align:center; padding:40px 20px; color:var(--ink-soft); font-size:14px; }
+
+  .new-row{ display:flex; gap:8px; padding:12px; background:#FBFAF7; border-top:1px solid var(--line); }
+  .new-row input{
+    flex:1; border:1px solid var(--line); border-radius:7px; padding:8px 10px;
+    font-size:13.5px; font-family:inherit; outline:none;
+  }
+  .new-row input:focus{ border-color:var(--accent); }
+  .new-row button{
+    background:var(--ink); color:#fff; border:none; border-radius:7px; padding:8px 14px;
+    font-size:13px; font-weight:600; cursor:pointer;
+  }
+
+  .legend{ display:flex; gap:16px; margin-top:14px; font-size:11.5px; color:var(--ink-soft); flex-wrap:wrap; }
+  .legend span{ display:inline-flex; align-items:center; gap:5px; }
+  .legend .sw{ width:8px; height:8px; border-radius:2px; display:inline-block; }
+
+  .save-msg{ font-size:11px; color:var(--ink-soft); margin-top:8px; min-height:14px; }
+
+  .mode-switch{ display:flex; background:#EAE8E1; border-radius:8px; padding:3px; }
+  .mode-btn{
+    border:none; background:transparent; font-size:12px; font-weight:700; color:var(--ink-soft);
+    padding:6px 12px; border-radius:6px; cursor:pointer; font-family:inherit;
+  }
+  .mode-btn.active{ background:var(--paper); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,0.06); }
+
+  select#parentStudentSelect{
+    width:100%; border:none; font-size:15px; font-family:inherit; color:var(--ink);
+    padding:6px 0; border-bottom:1px solid var(--line); outline:none; background:transparent;
+  }
+
+  .stat-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:20px; }
+  .stat-box{ background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .stat-box .stat-label{ font-size:11.5px; color:var(--ink-soft); font-weight:700; margin-bottom:4px; }
+  .stat-box .stat-value{ font-size:24px; font-weight:800; }
+  .stat-box .stat-value.good{ color:var(--good); }
+  .stat-box .stat-value.warn{ color:var(--warn); }
+
+  .today-status{ display:flex; gap:10px; margin-bottom:20px; }
+  .status-card{ flex:1; background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:14px 16px; text-align:center; }
+  .status-card .label{ font-size:11px; color:var(--ink-soft); font-weight:700; margin-bottom:6px; }
+  .status-card .badge{ display:inline-block; padding:5px 12px; border-radius:6px; font-size:13px; font-weight:700; }
+  .status-card .badge.good{ background:var(--good-bg); color:var(--good); }
+  .status-card .badge.warn{ background:var(--warn-bg); color:var(--warn); }
+  .status-card .badge.absent{ background:var(--absent-bg); color:var(--absent); }
+  .status-card .badge.none{ background:#EFEDE6; color:var(--ink-soft); }
+
+  .hw-text-display{ font-size:14.5px; line-height:1.6; color:var(--ink); white-space:pre-wrap; }
+
+  .link-btn{
+    border:1px solid var(--accent); background:transparent; color:var(--accent);
+    font-size:11px; font-weight:700; padding:5px 8px; border-radius:6px; cursor:pointer; white-space:nowrap;
+  }
+  .toast{
+    position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:#fff; padding:10px 18px; border-radius:8px;
+    font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s; z-index:50;
+  }
+  .toast.show{ opacity:1; }
+
+  .locked-name{ font-size:16px; font-weight:800; padding:6px 0; }
+
+  /* ---- Brand home screen (navy/gold) ---- */
+  body{ background:#F7F4EC; }
+  .brand-banner{
+    background:transparent; border-radius:0; padding:36px 10px 28px; text-align:center; margin-bottom:0;
+  }
+  .brand-badge{
+    width:120px; height:120px; border-radius:50%; background:#A8D8F0;
+    display:flex; align-items:center; justify-content:center; margin:0 auto 22px;
+  }
+  .brand-badge .il{ font-size:38px; font-weight:900; color:#4A8FB5; letter-spacing:-0.02em; }
+  .brand-wordmark{ font-size:36px; font-weight:900; color:#4A8FB5; letter-spacing:-0.02em; margin-bottom:10px; }
+  .brand-tagline-text{ font-style:italic; font-size:15px; color:#7A7565; margin-bottom:28px; }
+  .login-card{
+    background:#fff; border-radius:20px; padding:30px 24px 26px;
+    box-shadow:0 2px 18px rgba(22,33,62,0.06); margin-bottom:18px;
+  }
+  .login-card h2{ font-size:19px; font-weight:800; color:#4A8FB5; margin:0 0 22px; }
+  .login-field{ margin-bottom:18px; text-align:left; }
+  .login-field label{ font-size:13px; font-weight:700; color:#4A8FB5; display:block; margin-bottom:8px; }
+  .login-field input{
+    width:100%; border:1.5px solid #E4E0D4; border-radius:10px; padding:13px 14px;
+    font-size:14.5px; font-family:inherit; outline:none; background:#FBFAF6; color:#4A8FB5;
+  }
+  .login-field input:focus{ border-color:#A8D8F0; background:#fff; }
+  .login-btn{
+    width:100%; background:#4A8FB5; color:#fff; border:none; border-radius:10px;
+    padding:14px; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; margin-top:6px;
+  }
+  .login-btn:active{ opacity:0.9; }
+  .login-hint{ font-size:11.5px; color:var(--ink-soft); text-align:center; margin-top:12px; }
+  .login-error{ font-size:12px; color:var(--absent); margin-top:-8px; margin-bottom:14px; text-align:left; min-height:14px; }
+
+  /* ---- Login screen wrapper ---- */
+  .login-page{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:20px; background:#F7F4EC;
+  }
+  .login-page-inner{ width:100%; max-width:380px; }
+
+  /* ---- Student view ---- */
+  .student-hw-card{ background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:14px; }
+  .student-hw-card .hw-label{ font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-bottom:8px; }
+  .student-hw-card .hw-content{ font-size:15px; font-weight:600; color:var(--ink); line-height:1.6; }
+  .hw-self-btns{ display:flex; gap:8px; margin-top:14px; }
+  .hw-self-btn{
+    flex:1; border:1.5px solid var(--line); background:var(--paper); border-radius:10px;
+    padding:12px 8px; font-size:13px; font-weight:700; color:var(--ink-soft); cursor:pointer; text-align:center;
+    transition:all .12s;
+  }
+  .hw-self-btn.active.good{ background:var(--good-bg); border-color:var(--good); color:var(--good); }
+  .hw-self-btn.active.warn{ background:var(--warn-bg); border-color:var(--warn); color:var(--warn); }
+  .hw-self-btn.active.absent{ background:var(--absent-bg); border-color:var(--absent); color:var(--absent); }
+
+  .timer-card{ background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:20px 18px; margin-bottom:14px; text-align:center; }
+  .timer-display{ font-size:52px; font-weight:900; letter-spacing:-0.03em; color:var(--ink); font-variant-numeric:tabular-nums; margin:12px 0; }
+  .timer-display.running{ color:#4A8FB5; }
+  .timer-btns{ display:flex; gap:8px; justify-content:center; margin-top:4px; }
+  .timer-btn{
+    border:none; border-radius:10px; padding:11px 22px; font-size:14px; font-weight:700;
+    cursor:pointer; font-family:inherit;
+  }
+  .timer-btn.start{ background:#4A8FB5; color:#fff; }
+  .timer-btn.stop{ background:#E5E3DC; color:var(--ink); }
+  .timer-btn.reset{ background:#EFEDE6; color:var(--ink-soft); }
+  .timer-log{ font-size:12px; color:var(--ink-soft); margin-top:10px; min-height:18px; }
+  .session-list{ margin-top:12px; text-align:left; }
+  .session-item{ font-size:12.5px; color:var(--ink-soft); padding:4px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
+  .session-item:last-child{ border-bottom:none; }
+  .total-time{ font-size:13px; font-weight:700; color:var(--ink); margin-top:8px; text-align:right; }
+
+  .menu-section-label{ font-size:12.5px; font-weight:700; color:var(--ink-soft); margin:18px 4px 10px; display:flex; align-items:center; gap:6px; }
+  .menu-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .menu-card{
+    background:var(--paper); border:1px solid var(--line); border-radius:14px;
+    padding:20px 14px; text-align:center; cursor:pointer; transition:transform .12s, box-shadow .12s;
+  }
+  .menu-card:active{ transform:scale(0.97); }
+  .menu-card .icon{ font-size:30px; margin-bottom:8px; }
+  .menu-card .title{ font-size:14.5px; font-weight:800; margin-bottom:3px; }
+  .menu-card .desc{ font-size:11.5px; color:var(--ink-soft); }
+  .menu-card.disabled{ opacity:0.45; cursor:default; }
+  .menu-card.disabled:active{ transform:none; }
+  .menu-card .badge-soon{
+    display:inline-block; background:#EFEDE6; color:var(--ink-soft); font-size:9.5px; font-weight:700;
+    padding:2px 7px; border-radius:999px; margin-top:6px;
+  }
+
+  .back-link{
+    display:inline-flex; align-items:center; gap:4px; font-size:12.5px; font-weight:600;
+    color:var(--ink-soft); cursor:pointer; margin-bottom:14px;
+  }
+  .back-link:hover{ color:var(--ink); }
+
+  /* ---- App shell: sidebar + main column ---- */
+  .app-shell{ display:flex; min-height:100vh; align-items:stretch; }
+
+  .sidebar{
+    width:220px; flex-shrink:0; background:#173C33; color:#F3F1E8;
+    display:flex; flex-direction:column; padding:22px 14px 18px;
+  }
+  .side-brand{ display:flex; align-items:center; gap:10px; padding:0 8px 20px; }
+  .side-logo{
+    width:38px; height:38px; border-radius:10px; background:#A8D8F0; color:#173C33;
+    display:flex; align-items:center; justify-content:center; font-weight:900; font-size:14px; flex-shrink:0;
+  }
+  .side-name{ font-size:14.5px; font-weight:800; color:#fff; letter-spacing:-0.01em; }
+  .side-sub{ font-size:11px; color:#9FB3AC; margin-top:1px; }
+  .side-nav{ display:flex; flex-direction:column; gap:2px; overflow-y:auto; }
+  .side-item{
+    display:flex; align-items:center; gap:10px; width:100%; text-align:left;
+    background:transparent; border:none; color:#D9E2DD; font-family:inherit;
+    font-size:13px; font-weight:600; padding:10px 10px; border-radius:9px; cursor:pointer;
+  }
+  .side-item .side-icon{ font-size:15px; width:18px; text-align:center; flex-shrink:0; }
+  .side-item:hover{ background:rgba(255,255,255,0.06); }
+  .side-item.active{ background:#F3F1E8; color:#173C33; }
+  .side-item.disabled{ opacity:0.45; cursor:default; }
+  .side-item.disabled:hover{ background:transparent; }
+  .side-item .side-soon{
+    margin-left:auto; font-size:9px; font-weight:700; color:#9FB3AC; background:rgba(255,255,255,0.08);
+    padding:2px 6px; border-radius:999px; white-space:nowrap;
+  }
+  .side-divider{ height:1px; background:rgba(255,255,255,0.1); margin:10px 4px; }
+
+  .main-col{ flex:1; min-width:0; display:flex; flex-direction:column; }
+  .topbar{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:16px 28px; background:var(--paper); border-bottom:1px solid var(--line);
+  }
+  .topbar h1{ font-size:17px; font-weight:800; letter-spacing:-0.02em; margin:0; }
+  .topbar .date{ font-size:12.5px; color:var(--ink-soft); font-variant-numeric:tabular-nums; }
+
+  .wrap{ max-width:1040px; margin:0 auto; padding:24px 24px 80px; }
+  header{ display:none; }
+
+  .welcome-card{
+    background:linear-gradient(135deg,#1F5C4D,#2F6B4F); color:#fff; border-radius:16px;
+    padding:22px 24px; margin-bottom:22px;
+  }
+  .welcome-card .wc-date{ font-size:12.5px; opacity:0.85; margin-bottom:6px; }
+  .welcome-card .wc-title{ font-size:21px; font-weight:800; letter-spacing:-0.01em; margin-bottom:4px; }
+  .welcome-card .wc-sub{ font-size:12.5px; opacity:0.85; }
+
+  .notice-banner{
+    display:flex; align-items:flex-start; gap:10px; background:#FCF3D0; border:1px solid #E9D98A;
+    border-radius:12px; padding:14px 16px; margin-bottom:22px;
+  }
+  .notice-banner .notice-icon{ font-size:16px; }
+  .notice-banner .notice-label{ font-size:11px; font-weight:800; color:#8A6D1D; margin-bottom:2px; }
+  .notice-banner .notice-text{ font-size:13px; color:#5B4A16; line-height:1.5; white-space:pre-wrap; }
+
+  .settings-card{ background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:16px; }
+  .settings-card h3{ font-size:14.5px; font-weight:800; margin:0 0 4px; }
+  .settings-card .settings-desc{ font-size:11.5px; color:var(--ink-soft); margin-bottom:14px; }
+  .settings-card textarea{
+    width:100%; border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    font-size:14px; font-family:inherit; color:var(--ink); outline:none; resize:vertical; min-height:80px;
+  }
+  .settings-card textarea:focus{ border-color:var(--accent); }
+  .settings-field{ margin-bottom:14px; }
+  .settings-field label{ font-size:12px; font-weight:700; color:var(--ink-soft); display:block; margin-bottom:6px; }
+  .settings-field input{
+    width:100%; border:1px solid var(--line); border-radius:8px; padding:9px 12px;
+    font-size:14px; font-family:inherit; color:var(--ink); outline:none;
+  }
+  .settings-field input:focus{ border-color:var(--accent); }
+  .settings-save-btn{
+    background:var(--ink); color:#fff; border:none; border-radius:8px; padding:9px 16px;
+    font-size:13px; font-weight:700; cursor:pointer; font-family:inherit;
+  }
+
+  /* ---- Schedule / calendar ---- */
+  .sched-type-pill{
+    border:1.5px solid var(--line); background:var(--paper); border-radius:8px;
+    font-size:12.5px; font-weight:700; padding:8px 6px; cursor:pointer; color:var(--ink-soft);
+    text-align:center; transition:all .12s;
+  }
+  .sched-type-pill.active[data-type="exam"]{ background:#F8E6EA; border-color:var(--absent); color:var(--absent); }
+  .sched-type-pill.active[data-type="test"]{ background:#DDEFF7; border-color:#3E7EA0; color:#3E7EA0; }
+  .sched-type-pill.active[data-type="vacation"]{ background:#E7F1EA; border-color:var(--good); color:var(--good); }
+  .sched-type-pill.active[data-type="etc"]{ background:#FBEADF; border-color:var(--warn); color:var(--warn); }
+  .sched-type-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:14px; }
+
+  .sched-badge{
+    display:inline-block; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:999px; flex-shrink:0;
+  }
+  .sched-badge.exam{ background:#F8E6EA; color:var(--absent); }
+  .sched-badge.test{ background:#DDEFF7; color:#3E7EA0; }
+  .sched-badge.vacation{ background:#E7F1EA; color:var(--good); }
+  .sched-badge.etc{ background:#FBEADF; color:var(--warn); }
+
+  .sched-list{ display:flex; flex-direction:column; gap:8px; }
+  .sched-item{
+    display:flex; align-items:center; gap:10px; background:var(--paper); border:1px solid var(--line);
+    border-radius:10px; padding:11px 14px;
+  }
+  .sched-date{ font-size:12px; font-weight:800; color:var(--ink); width:64px; flex-shrink:0; font-variant-numeric:tabular-nums; }
+  .sched-body{ flex:1; min-width:0; }
+  .sched-title{ font-size:13.5px; font-weight:700; color:var(--ink); margin-bottom:2px; }
+  .sched-meta{ font-size:11px; color:var(--ink-soft); display:flex; align-items:center; gap:6px; }
+  .sched-del{ font-size:11px; color:var(--ink-soft); cursor:pointer; flex-shrink:0; }
+  .sched-del:hover{ color:var(--absent); }
+  .sched-empty{ text-align:center; padding:24px 12px; color:var(--ink-soft); font-size:13px; }
+
+  .report-title{ font-size:15px; font-weight:800; color:var(--ink); }
+  .report-sub{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
+
+  /* ---- Student planner ---- */
+  .planner-stat-row{ font-size:14px; color:var(--ink); margin-bottom:6px; display:flex; align-items:center; gap:6px; }
+  .planner-stat-row:last-child{ margin-bottom:0; }
+  .planner-stat-row b{ font-variant-numeric:tabular-nums; }
+  .planner-toggle-btn{
+    border:1.5px solid var(--line); background:#F3EAD8; color:#8A6D1D; border-radius:8px;
+    font-size:11.5px; font-weight:700; padding:8px 12px; cursor:pointer; font-family:inherit; white-space:nowrap;
+  }
+  .planner-toggle-btn.on{ background:var(--good-bg); border-color:var(--good); color:var(--good); }
+  .planner-delete-btn{
+    border:1px solid #E9C9CF; background:#FBEEF0; color:var(--absent); border-radius:8px;
+    font-size:11.5px; font-weight:700; padding:8px 12px; cursor:pointer; font-family:inherit; white-space:nowrap;
+  }
+  .dday-badge{
+    display:inline-block; background:#1F5C4D; color:#fff; font-size:12px; font-weight:800;
+    padding:4px 10px; border-radius:999px; margin-top:8px;
+  }
+  .plan-item{ display:flex; align-items:center; gap:10px; background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .plan-check{ width:19px; height:19px; flex-shrink:0; cursor:pointer; accent-color:var(--good); }
+  .plan-item.done .plan-title{ text-decoration:line-through; color:var(--ink-soft); }
+  .plan-date{ font-size:11px; color:var(--ink-soft); width:38px; flex-shrink:0; font-variant-numeric:tabular-nums; }
+  .plan-title{ flex:1; font-size:13.5px; font-weight:600; color:var(--ink); }
+  .plan-add-row{ display:flex; gap:8px; margin-top:12px; }
+  .plan-add-row input[type="date"]{ flex:0 0 130px; border:1px solid var(--line); border-radius:8px; padding:8px 8px; font-family:inherit; font-size:12.5px; }
+  .plan-add-row input[type="text"]{ flex:1; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-family:inherit; font-size:13px; }
+
+  /* ---- Q&A ---- */
+  .qna-item{ background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
+  .qna-top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
+  .qna-student{ font-size:12.5px; font-weight:800; color:var(--ink); }
+  .qna-date{ font-size:11px; color:var(--ink-soft); }
+  .qna-question{ font-size:14px; color:var(--ink); line-height:1.5; margin-bottom:10px; white-space:pre-wrap; }
+  .qna-status{ display:inline-block; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:999px; margin-bottom:8px; }
+  .qna-status.pending{ background:#FBEADF; color:var(--warn); }
+  .qna-status.answered{ background:var(--good-bg); color:var(--good); }
+  .qna-answer-display{ background:#F6F5F1; border-radius:8px; padding:10px 12px; font-size:13.5px; color:var(--ink); line-height:1.5; white-space:pre-wrap; margin-top:6px; }
+  .qna-answer-box{ display:flex; gap:8px; margin-top:6px; }
+  .qna-answer-box textarea{
+    flex:1; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-family:inherit;
+    font-size:13.5px; min-height:44px; resize:vertical; outline:none;
+  }
+  .qna-answer-box textarea:focus{ border-color:var(--accent); }
+  .qna-answer-btn{
+    background:var(--ink); color:#fff; border:none; border-radius:8px; padding:0 16px;
+    font-size:12.5px; font-weight:700; cursor:pointer; font-family:inherit; flex-shrink:0;
+  }
+  .qna-edit-link{ font-size:11px; color:var(--ink-soft); cursor:pointer; margin-top:6px; display:inline-block; }
+  .qna-edit-link:hover{ color:var(--ink); }
+  .qna-ask-row{ display:flex; gap:8px; }
+  .qna-ask-row textarea{
+    flex:1; border:1px solid var(--line); border-radius:8px; padding:10px 12px; font-family:inherit;
+    font-size:13.5px; min-height:60px; resize:vertical; outline:none;
+  }
+  .qna-ask-row textarea:focus{ border-color:var(--accent); }
+
+  /* ---- Class management (반 관리) ---- */
+  .class-chip-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:4px; }
+  .class-chip{
+    background:var(--paper); border:1px solid var(--line); border-radius:999px; padding:8px 14px;
+    font-size:12.5px; font-weight:700; color:var(--ink); cursor:pointer; display:flex; align-items:center; gap:6px;
+  }
+  .class-chip:hover{ border-color:var(--accent); }
+  .class-chip .count{ background:#EFEDE6; color:var(--ink-soft); font-size:10.5px; font-weight:800; padding:1px 7px; border-radius:999px; }
+  .class-add-row{ display:flex; gap:8px; }
+  .class-add-row input{ flex:1; border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-family:inherit; font-size:13.5px; }
+  .class-list-item{
+    display:flex; justify-content:space-between; align-items:center; background:var(--paper); border:1px solid var(--line);
+    border-radius:10px; padding:10px 14px; margin-top:8px;
+  }
+  .class-list-item .cname{ font-size:13.5px; font-weight:700; color:var(--ink); }
+  .class-list-item .ccount{ font-size:11px; color:var(--ink-soft); margin-left:6px; }
+  .class-student-row{ display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--line); }
+  .class-student-row:last-child{ border-bottom:none; }
+  .class-student-row input[type="checkbox"]{ width:18px; height:18px; accent-color:var(--good); cursor:pointer; }
+  .class-comment-item{
+    background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-bottom:8px;
+  }
+  .class-comment-text{ font-size:13.5px; color:var(--ink); line-height:1.5; white-space:pre-wrap; }
+  .class-comment-meta{ font-size:11px; color:var(--ink-soft); margin-top:4px; display:flex; justify-content:space-between; }
+
+  .section-label{ font-size:13px; font-weight:800; color:var(--ink); margin:0 2px 12px; display:flex; align-items:center; gap:6px; }
+
+  .home-stat-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-bottom:26px; }
+  .home-stat{ background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:16px 14px; text-align:center; }
+  .home-stat .hs-value{ font-size:22px; font-weight:800; color:var(--ink); margin-bottom:2px; }
+  .home-stat .hs-label{ font-size:11px; color:var(--ink-soft); font-weight:600; }
+
+  .qa-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px; }
+  .qa-card{
+    background:var(--paper); border:1px solid var(--line); border-radius:14px; padding:16px 14px;
+    cursor:pointer; transition:transform .12s;
+  }
+  .qa-card:active{ transform:scale(0.97); }
+  .qa-card.disabled{ opacity:0.5; cursor:default; }
+  .qa-card.disabled:active{ transform:none; }
+  .qa-icon{
+    width:38px; height:38px; border-radius:10px; display:flex; align-items:center; justify-content:center;
+    font-size:18px; margin-bottom:10px;
+  }
+  .qa-icon.c1{ background:#FBEADF; } .qa-icon.c2{ background:#FCF3D0; } .qa-icon.c3{ background:#E7F1EA; }
+  .qa-icon.c4{ background:#F8E6EA; } .qa-icon.c5{ background:#E4E9F7; } .qa-icon.c6{ background:#EDE3F5; }
+  .qa-icon.c7{ background:#DDEFF7; } .qa-icon.c8{ background:#F3EAD8; }
+  .qa-card .qa-title{ font-size:13.5px; font-weight:800; margin-bottom:2px; }
+  .qa-card .qa-desc{ font-size:11px; color:var(--ink-soft); }
+  .qa-card .badge-soon{
+    display:inline-block; background:#EFEDE6; color:var(--ink-soft); font-size:9px; font-weight:700;
+    padding:2px 7px; border-radius:999px; margin-top:6px;
+  }
+
+  @media (max-width:760px){
+    .sidebar{
+      width:64px; padding:16px 8px;
+    }
+    .side-brand{ justify-content:center; padding:0 0 16px; }
+    .side-brand > div{ display:none; }
+    .side-item{ justify-content:center; padding:11px 4px; }
+    .side-item .side-label{ display:none; }
+    .side-item .side-soon{ display:none; }
+    .topbar{ padding:14px 18px; }
+    .topbar h1{ font-size:15px; }
+    .wrap{ padding:18px 16px 70px; }
+    .home-stat-row{ grid-template-columns:repeat(3,1fr); gap:8px; }
+    .home-stat .hs-value{ font-size:18px; }
+    .qa-grid{ grid-template-columns:repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+<div id="loginScreen" class="login-page">
+  <div class="login-page-inner">
+    <div class="brand-banner">
+      <div class="brand-badge"><span class="il">IL</span></div>
+      <div class="brand-wordmark">Inner Leader</div>
+      <div class="brand-tagline-text">원장님 전용 관리 시스템</div>
+    </div>
+    <div class="login-card">
+      <h2>원장 로그인</h2>
+      <div class="login-field">
+        <label>아이디</label>
+        <input id="loginId" type="text" autocomplete="username" placeholder="아이디를 입력하세요">
+      </div>
+      <div class="login-field">
+        <label>비밀번호</label>
+        <input id="loginPw" type="password" autocomplete="current-password" placeholder="비밀번호를 입력하세요">
+      </div>
+      <div class="login-error" id="loginError"></div>
+      <button class="login-btn" onclick="handleTeacherLogin()">로그인</button>
+      <div class="login-hint" id="loginHint"></div>
+    </div>
+  </div>
+</div>
+<div class="app-shell" id="appShell" style="display:none;">
+  <aside class="sidebar">
+    <div class="side-brand">
+      <div class="side-logo">IL</div>
+      <div>
+        <div class="side-name">Inner Leader</div>
+        <div class="side-sub">원장님 · 관리</div>
+      </div>
+    </div>
+    <nav class="side-nav" id="sideNav">
+      <button class="side-item active" data-mode="home" onclick="setMode('home')"><span class="side-icon">🏠</span><span class="side-label">관리 홈</span></button>
+      <button class="side-item" data-mode="settings" onclick="setMode('settings')"><span class="side-icon">⚙️</span><span class="side-label">설정·공지</span></button>
+      <div class="side-divider"></div>
+      <button class="side-item" data-mode="class" onclick="setMode('class')"><span class="side-icon">🏫</span><span class="side-label">반 관리</span></button>
+      <button class="side-item" data-mode="teacher" onclick="setMode('teacher')"><span class="side-icon">✋</span><span class="side-label">출결 관리</span></button>
+      <button class="side-item" data-mode="teacher" onclick="setMode('teacher')"><span class="side-icon">👥</span><span class="side-label">학생 관리</span></button>
+      <button class="side-item" data-mode="report" onclick="setMode('report')"><span class="side-icon">📝</span><span class="side-label">학생 리포트</span></button>
+      <button class="side-item" data-mode="planner" onclick="setMode('planner')"><span class="side-icon">🗓️</span><span class="side-label">학생 플래너</span></button>
+      <button class="side-item disabled" disabled><span class="side-icon">📚</span><span class="side-label">문제은행·학습지</span><span class="side-soon">준비중</span></button>
+      <button class="side-item disabled" disabled><span class="side-icon">🗂️</span><span class="side-label">수학 자료방</span><span class="side-soon">준비중</span></button>
+      <div class="side-divider"></div>
+      <button class="side-item" data-mode="schedule" onclick="setMode('schedule')"><span class="side-icon">📅</span><span class="side-label">일정 달력</span></button>
+      <button class="side-item disabled" disabled><span class="side-icon">📋</span><span class="side-label">홈피 게시판</span><span class="side-soon">준비중</span></button>
+      <button class="side-item" data-mode="parent" onclick="goParentEntry()"><span class="side-icon">👨‍👩‍👧</span><span class="side-label">학부모 관리</span></button>
+      <button class="side-item" data-mode="student" onclick="setMode('student')"><span class="side-icon">🎓</span><span class="side-label">학생 전용 앱</span></button>
+      <button class="side-item" data-mode="qna" onclick="setMode('qna')"><span class="side-icon">💬</span><span class="side-label">질문 Q&A</span><span class="side-soon" id="qnaSideBadge" style="display:none;"></span></button>
+      <button class="side-item disabled" disabled><span class="side-icon">🧑‍🏫</span><span class="side-label">강사 관리</span><span class="side-soon">준비중</span></button>
+    </nav>
+  </aside>
+
+  <div class="main-col">
+    <header class="topbar">
+      <h1 id="pageTitle">Inner Leader · 학습관리</h1>
+      <div class="date" id="todayLabel"></div>
+    </header>
+
+    <div class="wrap">
+  <div id="homeView">
+    <div class="welcome-card">
+      <div class="wc-date" id="wcDate"></div>
+      <div class="wc-title">Inner Leader 관리 홈</div>
+      <div class="wc-sub">이끄는 순간부터, 다릅니다 · 오늘도 좋은 수업 되세요 🍀</div>
+    </div>
+
+    <div class="notice-banner" id="noticeBanner" style="display:none;">
+      <span class="notice-icon">📌</span>
+      <div>
+        <div class="notice-label">공지</div>
+        <div class="notice-text" id="noticeBannerText"></div>
+      </div>
+    </div>
+
+    <div class="section-label">📋 오늘 한눈에</div>
+    <div class="home-stat-row">
+      <div class="home-stat">
+        <div class="hs-value" id="hsStudents">0명</div>
+        <div class="hs-label">전체 학생</div>
+      </div>
+      <div class="home-stat">
+        <div class="hs-value" id="hsAttendance">0 / 0</div>
+        <div class="hs-label">오늘 출석</div>
+      </div>
+      <div class="home-stat">
+        <div class="hs-value" id="hsHomework">0%</div>
+        <div class="hs-label">오늘 숙제 제출률</div>
+      </div>
+    </div>
+
+    <div class="section-label">⚡ 빠른 실행</div>
+    <div class="qa-grid">
+      <div class="qa-card" onclick="setMode('settings')">
+        <div class="qa-icon c8">⚙️</div>
+        <div class="qa-title">설정·공지</div>
+        <div class="qa-desc">공지 등록 · 계정 설정</div>
+      </div>
+      <div class="qa-card" onclick="setMode('teacher')">
+        <div class="qa-icon c1">✋</div>
+        <div class="qa-title">출결·숙제 관리</div>
+        <div class="qa-desc">출석 체크 · 오늘 과제 등록</div>
+      </div>
+      <div class="qa-card" onclick="goParentEntry()">
+        <div class="qa-icon c3">👨‍👩‍👧</div>
+        <div class="qa-title">학부모 전용 보기</div>
+        <div class="qa-desc">자녀 학습 데이터 열람</div>
+      </div>
+      <div class="qa-card" onclick="setMode('student')">
+        <div class="qa-icon c7">🎓</div>
+        <div class="qa-title">학생 전용 앱</div>
+        <div class="qa-desc">숙제 체크 · 공부 타이머</div>
+      </div>
+      <div class="qa-card disabled">
+        <div class="qa-icon c4">📐</div>
+        <div class="qa-title">진단평가</div>
+        <div class="qa-desc">수학 사고력 테스트</div>
+        <div class="badge-soon">준비중</div>
+      </div>
+      <div class="qa-card" onclick="setMode('report')">
+        <div class="qa-icon c2">📝</div>
+        <div class="qa-title">학생 리포트</div>
+        <div class="qa-desc">순공시간·진도·시험점수</div>
+      </div>
+      <div class="qa-card" onclick="setMode('planner')">
+        <div class="qa-icon c6">🗓️</div>
+        <div class="qa-title">학생 플래너</div>
+        <div class="qa-desc">학생별 순공·달성률·D-Day·주간계획</div>
+      </div>
+      <div class="qa-card disabled">
+        <div class="qa-icon c8">🗂️</div>
+        <div class="qa-title">수학 자료방</div>
+        <div class="qa-desc">학년별 자료 보관</div>
+        <div class="badge-soon">준비중</div>
+      </div>
+      <div class="qa-card" onclick="setMode('schedule')">
+        <div class="qa-icon c5">📅</div>
+        <div class="qa-title">일정 달력</div>
+        <div class="qa-desc">학생별 시험·테스트·방학 일정</div>
+      </div>
+      <div class="qa-card" onclick="setMode('qna')">
+        <div class="qa-icon c3">💬</div>
+        <div class="qa-title">질문 Q&A</div>
+        <div class="qa-desc" id="qnaQaDesc">학생 질문에 답변하기</div>
+      </div>
+      <div class="qa-card" onclick="setMode('class')">
+        <div class="qa-icon c1">🏫</div>
+        <div class="qa-title">반 관리</div>
+        <div class="qa-desc">반별 학생·숙제·코멘트</div>
+      </div>
+    </div>
+
+    <div class="section-label">🏫 반별 학생 정리</div>
+    <div class="settings-card" id="homeClassFrame"></div>
+  </div>
+
+  <div id="teacherView" style="display:none;">
+  <div class="back-link" onclick="goHome()">← 홈으로</div>
+  <div class="hw-card">
+    <label>오늘의 숙제</label>
+    <input id="hwInput" type="text" placeholder="예: 수학의 정석 p.84~89, 12~20번 / 모의고사 3회 오답정리">
+    <div class="save-msg" id="hwSaveMsg"></div>
+  </div>
+
+  <div class="settings-card">
+    <h3>✅ 오늘의 숙제 체크리스트</h3>
+    <div class="settings-desc">과제를 항목별로 등록하면 학생 전용 앱에서 학생이 각자 체크할 수 있어요.</div>
+    <div class="plan-add-row">
+      <input id="hwItemInput" type="text" placeholder="예: 수학의 정석 p.84~89 풀기" style="flex:1;">
+    </div>
+    <button class="settings-save-btn" style="width:100%; margin-top:8px;" onclick="addHomeworkItem()">항목 추가</button>
+    <div class="sched-list" id="hwItemList" style="margin-top:12px;"></div>
+  </div>
+
+  <div class="toolbar">
+    <span class="count" id="studentCount"></span>
+    <button class="add-btn" id="toggleAddBtn">+ 학생 추가</button>
+  </div>
+
+  <table class="roster" id="rosterTable">
+    <thead>
+      <tr>
+        <th style="width:22%">이름</th>
+        <th style="width:24%">출석</th>
+        <th style="width:24%">숙제 제출</th>
+        <th>최근 14일</th>
+        <th style="width:70px"></th>
+      </tr>
+    </thead>
+    <tbody id="rosterBody"></tbody>
+  </table>
+  <div class="new-row" id="newRowForm" style="display:none; border-radius:0 0 10px 10px; border-left:1px solid var(--line); border-right:1px solid var(--line); border-bottom:1px solid var(--line);">
+    <input id="newName" type="text" placeholder="학생 이름">
+    <input id="newPin" type="text" inputmode="numeric" maxlength="4" placeholder="PIN(선택, 4자리)" style="max-width:130px;">
+    <button id="addStudentBtn">추가</button>
+  </div>
+
+  <div class="legend">
+    <span><i class="sw" style="background:var(--good)"></i>출석 / 제출</span>
+    <span><i class="sw" style="background:var(--warn)"></i>지각 / 부분제출</span>
+    <span><i class="sw" style="background:var(--absent)"></i>결석 / 미제출</span>
+  </div>
+  </div>
+
+  <div id="parentView" style="display:none;">
+    <div class="back-link" onclick="goHome()">← 홈으로</div>
+    <div class="hw-card">
+      <label>학생 선택</label>
+      <select id="parentStudentSelect" onchange="renderParentView()"></select>
+    </div>
+    <div id="parentSummary"></div>
+  </div>
+
+  <div id="studentView" style="display:none;">
+    <div class="back-link" onclick="goHome()">← 홈으로</div>
+    <div class="hw-card">
+      <label>학생 선택</label>
+      <select id="studentViewSelect" onchange="renderStudentViewSelect()"></select>
+    </div>
+    <div id="studentSummary"></div>
+  </div>
+
+  <div id="settingsView" style="display:none;">
+    <div class="back-link" onclick="goHome()">← 홈으로</div>
+
+    <div class="settings-card">
+      <h3>📌 공지사항</h3>
+      <div class="settings-desc">관리 홈 상단에 표시됩니다. 학부모·학생에게 알릴 내용을 입력하세요.</div>
+      <textarea id="noticeInput" placeholder="예: 7월 5일(토)은 휴원입니다. / 여름방학 특강 신청 안내는 학부모 관리에서 확인하세요."></textarea>
+      <div class="save-msg" id="noticeSaveMsg"></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>👤 계정 설정</h3>
+      <div class="settings-desc">원장님 로그인에 사용할 아이디와 비밀번호를 설정·변경합니다.</div>
+      <div class="settings-field">
+        <label>아이디</label>
+        <input id="settingsId" type="text" placeholder="아이디">
+      </div>
+      <div class="settings-field">
+        <label>비밀번호</label>
+        <input id="settingsPw" type="password" placeholder="새 비밀번호 (4자 이상)">
+      </div>
+      <div class="settings-field">
+        <label>비밀번호 확인</label>
+        <input id="settingsPwConfirm" type="password" placeholder="비밀번호 확인">
+      </div>
+      <button class="settings-save-btn" onclick="saveAccountSettings()">저장</button>
+      <div class="save-msg" id="settingsSaveMsg"></div>
+      <button class="settings-save-btn" style="background:transparent; color:var(--absent); border:1px solid var(--absent); margin-top:8px;" onclick="handleTeacherLogout()">로그아웃</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>📆 전체 기본 D-Day</h3>
+      <div class="settings-desc">학생 플래너에서 개별 D-Day를 비워두면 이 기본값이 대신 표시됩니다.</div>
+      <div class="settings-field">
+        <label>제목</label>
+        <input id="defaultDdayTitle" type="text" placeholder="예: 여름방학 특강 시작">
+      </div>
+      <div class="settings-field">
+        <label>날짜</label>
+        <input id="defaultDdayDate" type="date">
+      </div>
+      <button class="settings-save-btn" onclick="saveDefaultDday()">기본 D-Day 저장</button>
+      <div class="save-msg" id="defaultDdaySaveMsg"></div>
+    </div>
+  </div>
+
+  <div id="scheduleView" style="display:none;">
+    <div class="back-link" onclick="goHome()">← 홈으로</div>
+
+    <div class="settings-card">
+      <h3>📅 일정 추가</h3>
+      <div class="settings-desc">학생을 선택하면 그 학생과 학부모 화면에 표시됩니다. "전체 학생"은 방학·휴원처럼 모두에게 보이는 일정에 사용하세요.</div>
+
+      <div class="settings-field">
+        <label>대상</label>
+        <select id="schedStudentSelect"></select>
+      </div>
+
+      <div class="settings-field">
+        <label>종류</label>
+        <div class="sched-type-grid" id="schedTypeGrid">
+          <div class="sched-type-pill active" data-type="exam" onclick="selectSchedType('exam')">시험</div>
+          <div class="sched-type-pill" data-type="test" onclick="selectSchedType('test')">테스트</div>
+          <div class="sched-type-pill" data-type="vacation" onclick="selectSchedType('vacation')">방학</div>
+          <div class="sched-type-pill" data-type="etc" onclick="selectSchedType('etc')">기타</div>
+        </div>
+      </div>
+
+      <div class="settings-field">
+        <label>날짜</label>
+        <input id="schedDate" type="date">
+      </div>
+
+      <div class="settings-field">
+        <label>내용</label>
+        <input id="schedTitle" type="text" placeholder="예: 중간고사 / 3월 모의고사 / 여름방학 시작">
+      </div>
+
+      <button class="settings-save-btn" onclick="addScheduleEvent()">일정 추가</button>
+      <div class="save-msg" id="schedSaveMsg"></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>📋 등록된 일정</h3>
+      <div class="sched-list" id="schedList"></div>
+    </div>
+  </div>
+
+  <div id="reportView" style="display:none;">
+    <div class="back-link" onclick="goHome()">← 홈으로</div>
+
+    <div class="settings-card">
+      <div class="settings-field" style="margin-bottom:0;">
+        <label>학생 선택</label>
+        <select id="reportStudentSelect" onchange="renderReportForSelected()"></select>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>📈 학습 진도</h3>
+      <div class="settings-desc">학부모 리포트 화면에 그대로 표시됩니다.</div>
+      <textarea id="reportProgressInput" oninput="onProgressInput(event)" placeholder="예: 이차함수 단원 완료, 다음 주부터 삼각함수 진도 예정입니다."></textarea>
+      <div class="save-msg" id="reportProgressMsg"></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>📝 시험 점수 추가</h3>
+      <div class="settings-field">
+        <label>시험 이름</label>
+        <input id="reportScoreTitle" type="text" placeholder="예: 6월 모의고사">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <div class="settings-field" style="flex:1;">
+          <label>점수</label>
+          <input id="reportScoreValue" type="number" placeholder="85">
+        </div>
+        <div class="settings-field" style="flex:1;">
+          <label>만점</label>
+          <input id="reportScoreMax" type="number" placeholder="100">
+        </div>
+      </div>
+      <div class="settings-field">
+        <label>날짜</label>
+        <input id="reportScoreDate" type="date">
+      </div>
+      <button class="settings-save-btn" onclick="addTestScore()">점수 추가</button>
+      <div class="save-msg" id="reportScoreMsg"></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>🗂️ 등록된 시험 점수</h3>
+      <div class="sched-list" id="reportScoreList"></div>
+    </div>
+  </div>
+
+  <div id="plannerView" style="display:none;">
+    <div class="back-link" onclick="goHome()">← 홈으로</div>
+
+    <div class="settings-card">
+      <div class="settings-field" style="margin-bottom:0;">
+        <label>학생 선택</label>
+        <select id="plannerStudentSelect" onchange="renderPlannerForSelected()"></select>
+      </div>
+    </div>
+
+    <div id="plannerContent"></div>
+  </div>
+
+  <div id="qnaView" style="display:none;">
+    <div class="back-link" onclick="goHome()">← 홈으로</div>
+    <div class="settings-desc" style="margin-bottom:14px;">학생이 남긴 질문에 답변을 남기면 그 학생 화면에 바로 표시됩니다.</div>
+    <div id="qnaTeacherList"></div>
+  </div>
+
+  <div id="classView" style="display:none;">
+    <div class="back-link" onclick="goHome()">← 홈으로</div>
+
+    <div class="settings-card">
+      <h3>🏫 반 만들기</h3>
+      <div class="class-add-row">
+        <input id="newClassName" type="text" placeholder="예: 고1 A반">
+        <button class="qna-answer-btn" onclick="addClass()">추가</button>
+      </div>
+      <div id="classListArea" style="margin-top:4px;"></div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-field" style="margin-bottom:0;">
+        <label>반 선택</label>
+        <select id="classSelect" onchange="onClassSelectChange()"></select>
+      </div>
+    </div>
+
+    <div id="classDetail"></div>
+  </div>
+
+    </div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script>
+// ---- Firebase(Firestore) 연동 ----
+// Firestore에 저장하되, SDK 로드 실패/네트워크 오류 시에는 localStorage로 자동 대체합니다.
+const LS_PREFIX = 'innerleader_storage__';
+const FIRESTORE_COLLECTION = 'innerleader_data';
+let db = null;
+
+// Firestore 보안 규칙이 request.auth != null 을 요구하므로,
+// 데이터를 읽고 쓰기 전에 반드시 익명 로그인이 완료되어야 합니다.
+// 이 Promise는 로그인(성공/실패 상관없이) 시도가 끝날 때 resolve됩니다.
+let firebaseAuthReady = Promise.resolve();
+
+try{
+  const firebaseConfig = {
+    apiKey: "AIzaSyC51kXQ1fsoASC2dvlpo8ZqRPlL5mV7m4Y",
+    authDomain: "inner-leader-7e44f.firebaseapp.com",
+    projectId: "inner-leader-7e44f",
+    storageBucket: "inner-leader-7e44f.firebasestorage.app",
+    messagingSenderId: "565345027852",
+    appId: "1:565345027852:web:6b095e559ee873b72a6b29"
+  };
+  if(window.firebase && firebase.initializeApp){
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    console.log('Firestore 연결 완료');
+
+    if(firebase.auth){
+      firebaseAuthReady = firebase.auth().signInAnonymously()
+        .then(() => { console.log('익명 로그인 완료'); })
+        .catch((e) => {
+          console.error('익명 로그인 실패, localStorage로 대체합니다:', e);
+          db = null; // 인증이 안 되면 Firestore 접근은 계속 실패하므로 아예 로컬 저장소만 사용
+        });
+    } else {
+      console.warn('Firebase Auth SDK를 불러오지 못해 localStorage로 대체합니다.');
+      db = null;
+    }
+  } else {
+    console.warn('Firebase SDK를 불러오지 못해 localStorage로 대체합니다.');
+  }
+}catch(e){
+  console.error('Firebase 초기화 오류, localStorage로 대체합니다:', e);
+  db = null;
+}
+
+function lsGet(key){
+  try{
+    const raw = localStorage.getItem(LS_PREFIX + key);
+    if(raw === null) return null;
+    return { key, value: raw, shared: false };
+  }catch(e){ return null; }
+}
+function lsSet(key, value){
+  try{
+    localStorage.setItem(LS_PREFIX + key, value);
+    return { key, value, shared: false };
+  }catch(e){ return null; }
+}
+function lsDelete(key){
+  try{
+    localStorage.removeItem(LS_PREFIX + key);
+    return { key, deleted: true, shared: false };
+  }catch(e){ return null; }
+}
+function lsList(prefix){
+  try{
+    const keys = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf(LS_PREFIX) === 0){
+        const shortKey = k.slice(LS_PREFIX.length);
+        if(!prefix || shortKey.indexOf(prefix) === 0) keys.push(shortKey);
+      }
+    }
+    return { keys, prefix, shared: false };
+  }catch(e){ return null; }
+}
+
+if(!window.storage){
+  window.storage = {
+    async get(key){
+      await firebaseAuthReady;
+      if(db){
+        try{
+          const doc = await db.collection(FIRESTORE_COLLECTION).doc(key).get();
+          if(!doc.exists) return null;
+          return { key, value: doc.data().value, shared: false };
+        }catch(e){ console.error('Firestore get 오류, localStorage로 대체:', e); }
+      }
+      return lsGet(key);
+    },
+    async set(key, value){
+      await firebaseAuthReady;
+      if(db){
+        try{
+          await db.collection(FIRESTORE_COLLECTION).doc(key).set({ value, updatedAt: Date.now() });
+          return { key, value, shared: false };
+        }catch(e){ console.error('Firestore set 오류, localStorage로 대체:', e); }
+      }
+      return lsSet(key, value);
+    },
+    async delete(key){
+      await firebaseAuthReady;
+      if(db){
+        try{
+          await db.collection(FIRESTORE_COLLECTION).doc(key).delete();
+          return { key, deleted: true, shared: false };
+        }catch(e){ console.error('Firestore delete 오류, localStorage로 대체:', e); }
+      }
+      return lsDelete(key);
+    },
+    async list(prefix){
+      await firebaseAuthReady;
+      if(db){
+        try{
+          const snap = await db.collection(FIRESTORE_COLLECTION).get();
+          const keys = [];
+          snap.forEach(d => { if(!prefix || d.id.indexOf(prefix) === 0) keys.push(d.id); });
+          return { keys, prefix, shared: false };
+        }catch(e){ console.error('Firestore list 오류, localStorage로 대체:', e); }
+      }
+      return lsList(prefix);
+    }
+  };
+}
+
+
+const todayKey = new Date().toISOString().slice(0,10);
+const todayLabelText = new Date().toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+document.getElementById('todayLabel').textContent = todayLabelText;
+const wcDateEl = document.getElementById('wcDate');
+if(wcDateEl) wcDateEl.textContent = todayLabelText + ' · 원장님 환영합니다 👋';
+
+const urlParams = new URLSearchParams(window.location.search);
+const lockedStudentId = urlParams.get('student');
+const lockedRole = urlParams.get('role') === 'student' ? 'student' : 'parent';
+
+let students = [];   // [{id, name}]
+let records = {};    // { "studentId:date": {att: 'good'|'warn'|'absent'|null, hw: 'good'|'warn'|'absent'|null} }
+let homeworkByDate = {}; // { date: text }
+let teacherAuth = null; // { id, pw } or null if not yet set up
+let notice = ''; // announcement text shown on home banner
+let schedule = []; // [{id, studentId:'all'|id, type:'exam'|'test'|'vacation'|'etc', date:'YYYY-MM-DD', title}]
+let selectedSchedType = 'exam';
+let studyTimeByDate = {}; // { "studentId:date": totalSeconds }
+let progressByStudent = {}; // { studentId: text }
+let testScores = []; // [{id, studentId, title, score, maxScore, date}]
+let planEntries = []; // [{id, studentId, date:'YYYY-MM-DD', title, done}]
+let studentDDay = {}; // { studentId: {title, date} }
+let defaultDDay = null; // {title, date} or null
+let parentVisible = {}; // { studentId: boolean } - whether planner is shown to that student's parent
+let questions = []; // [{id, studentId, text, answer, date, answeredAt}]
+let homeworkItems = []; // [{id, date, text}]
+let homeworkItemChecks = {}; // { "studentId:itemId": true }
+let classes = []; // [{id, name}]
+let classOf = {}; // { studentId: classId }
+let classComments = []; // [{id, classId, text, date}]
+
+async function loadAll(){
+  try{
+    const s = await window.storage.get('students', true);
+    students = s ? JSON.parse(s.value) : [];
+  }catch(e){ students = []; }
+  try{
+    const r = await window.storage.get('records', true);
+    records = r ? JSON.parse(r.value) : {};
+  }catch(e){ records = {}; }
+  try{
+    const h = await window.storage.get('homework', true);
+    homeworkByDate = h ? JSON.parse(h.value) : {};
+  }catch(e){ homeworkByDate = {}; }
+  try{
+    const ta = await window.storage.get('teacherAuth', true);
+    teacherAuth = ta ? JSON.parse(ta.value) : null;
+  }catch(e){ teacherAuth = null; }
+  try{
+    const n = await window.storage.get('notice', true);
+    notice = n ? n.value : '';
+  }catch(e){ notice = ''; }
+  try{
+    const sc = await window.storage.get('schedule', true);
+    schedule = sc ? JSON.parse(sc.value) : [];
+  }catch(e){ schedule = []; }
+  try{
+    const st = await window.storage.get('studyTime', true);
+    studyTimeByDate = st ? JSON.parse(st.value) : {};
+  }catch(e){ studyTimeByDate = {}; }
+  try{
+    const pr = await window.storage.get('progress', true);
+    progressByStudent = pr ? JSON.parse(pr.value) : {};
+  }catch(e){ progressByStudent = {}; }
+  try{
+    const ts = await window.storage.get('testScores', true);
+    testScores = ts ? JSON.parse(ts.value) : [];
+  }catch(e){ testScores = []; }
+  try{
+    const pe = await window.storage.get('planEntries', true);
+    planEntries = pe ? JSON.parse(pe.value) : [];
+  }catch(e){ planEntries = []; }
+  try{
+    const sd = await window.storage.get('studentDDay', true);
+    studentDDay = sd ? JSON.parse(sd.value) : {};
+  }catch(e){ studentDDay = {}; }
+  try{
+    const dd = await window.storage.get('defaultDDay', true);
+    defaultDDay = dd ? JSON.parse(dd.value) : null;
+  }catch(e){ defaultDDay = null; }
+  try{
+    const pv = await window.storage.get('parentVisible', true);
+    parentVisible = pv ? JSON.parse(pv.value) : {};
+  }catch(e){ parentVisible = {}; }
+  try{
+    const q = await window.storage.get('questions', true);
+    questions = q ? JSON.parse(q.value) : [];
+  }catch(e){ questions = []; }
+  updateQnaBadges();
+  try{
+    const hi = await window.storage.get('homeworkItems', true);
+    homeworkItems = hi ? JSON.parse(hi.value) : [];
+  }catch(e){ homeworkItems = []; }
+  try{
+    const hc = await window.storage.get('homeworkItemChecks', true);
+    homeworkItemChecks = hc ? JSON.parse(hc.value) : {};
+  }catch(e){ homeworkItemChecks = {}; }
+  try{
+    const cl = await window.storage.get('classes', true);
+    classes = cl ? JSON.parse(cl.value) : [];
+  }catch(e){ classes = []; }
+  try{
+    const co = await window.storage.get('classOf', true);
+    classOf = co ? JSON.parse(co.value) : {};
+  }catch(e){ classOf = {}; }
+  try{
+    const cc = await window.storage.get('classComments', true);
+    classComments = cc ? JSON.parse(cc.value) : [];
+  }catch(e){ classComments = []; }
+  renderHwItemList();
+  renderHomeClassFrame();
+
+  const defaultDdayTitleEl = document.getElementById('defaultDdayTitle');
+  const defaultDdayDateEl = document.getElementById('defaultDdayDate');
+  if(defaultDdayTitleEl && defaultDDay){
+    defaultDdayTitleEl.value = defaultDDay.title || '';
+    defaultDdayDateEl.value = defaultDDay.date || '';
+  }
+
+  const hint = document.getElementById('loginHint');
+  if(hint){
+    hint.textContent = teacherAuth ? '' : '처음 사용이신가요? 아이디·비밀번호를 입력하면 계정이 생성됩니다.';
+  }
+
+  document.getElementById('hwInput').value = homeworkByDate[todayKey] || '';
+  const noticeInputEl = document.getElementById('noticeInput');
+  if(noticeInputEl) noticeInputEl.value = notice;
+  if(teacherAuth){
+    const settingsIdEl = document.getElementById('settingsId');
+    if(settingsIdEl) settingsIdEl.value = teacherAuth.id || '';
+  }
+  renderNoticeBanner();
+  render();
+
+  if(lockedStudentId){
+    // 학부모/학생 공유 링크로 접속한 경우 원장 로그인 없이 바로 앱을 보여줍니다.
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appShell').style.display = 'flex';
+    applyLockedView();
+  } else {
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('appShell').style.display = 'none';
+    const idEl = document.getElementById('loginId');
+    if(idEl) setTimeout(() => idEl.focus(), 30);
+  }
+}
+
+function renderNoticeBanner(){
+  const banner = document.getElementById('noticeBanner');
+  const text = document.getElementById('noticeBannerText');
+  if(!banner || !text) return;
+  if(notice && notice.trim()){
+    text.textContent = notice;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function applyLockedView(){
+  const student = students.find(s => s.id === lockedStudentId);
+  document.getElementById('homeView').style.display = 'none';
+  document.getElementById('teacherView').style.display = 'none';
+  document.getElementById('parentView').style.display = 'none';
+  document.getElementById('studentView').style.display = 'none';
+
+  const viewId = lockedRole === 'student' ? 'studentView' : 'parentView';
+  document.getElementById(viewId).style.display = '';
+
+  const backLink = document.querySelector('#' + viewId + ' .back-link');
+  if(backLink) backLink.style.display = 'none';
+
+  document.getElementById('pageTitle').textContent = student
+    ? student.name + (lockedRole === 'student' ? ' 학습 플래너' : ' 학습 현황')
+    : '학습 현황';
+
+  const wrapId = lockedRole === 'student' ? 'studentViewSelect' : 'parentStudentSelect';
+  const selectWrap = document.getElementById(wrapId).parentElement;
+  const summaryId = lockedRole === 'student' ? 'studentSummary' : 'parentSummary';
+
+  if(!student){
+    selectWrap.innerHTML = '<div class="empty">유효하지 않은 링크입니다. 선생님께 새 링크를 요청해주세요.</div>';
+    document.getElementById(summaryId).innerHTML = '';
+    return;
+  }
+
+  if(student.pin){
+    selectWrap.innerHTML = `
+      <label>PIN 입력</label>
+      <input id="pinGateInput" type="text" inputmode="numeric" maxlength="4" placeholder="4자리 PIN" style="width:100%; border:none; font-size:18px; letter-spacing:6px; text-align:center; padding:10px 0; border-bottom:1px solid var(--line); outline:none; background:transparent;">
+      <div class="save-msg" id="pinGateMsg"></div>
+      <button class="add-btn" style="margin-top:10px;" onclick="checkPinGate('${student.id}','${student.pin}')">확인</button>
+    `;
+    document.getElementById(summaryId).innerHTML = '';
+    setTimeout(() => {
+      const el = document.getElementById('pinGateInput');
+      if(el){
+        el.focus();
+        el.addEventListener('keydown', e => { if(e.key === 'Enter') checkPinGate(student.id, student.pin); });
+      }
+    }, 30);
+  } else {
+    selectWrap.innerHTML = '<label>학생</label><div class="locked-name">' + student.name + '</div>';
+    renderLockedContent(lockedStudentId);
+  }
+}
+
+function renderLockedContent(studentId){
+  if(lockedRole === 'student'){
+    renderStudentViewForId(studentId);
+  } else {
+    renderParentViewForId(studentId);
+  }
+}
+
+window.checkPinGate = function(studentId, correctPin){
+  const el = document.getElementById('pinGateInput');
+  const msg = document.getElementById('pinGateMsg');
+  if(!el) return;
+  if(el.value.trim() === correctPin){
+    const student = students.find(s => s.id === studentId);
+    const selectWrap = document.getElementById('parentStudentSelect').parentElement;
+    selectWrap.innerHTML = '<label>학생</label><div class="locked-name">' + student.name + '</div>';
+    renderLockedContent(studentId);
+  } else {
+    msg.textContent = 'PIN이 일치하지 않습니다.';
+    el.value = '';
+    el.focus();
+  }
+};
+
+async function saveStudents(){
+  try{
+    const r = await window.storage.set('students', JSON.stringify(students), true);
+    if(!r) console.error('students 저장 실패: storage.set returned null');
+  }catch(e){ console.error('students 저장 오류:', e); }
+}
+async function saveRecords(){
+  try{
+    const r = await window.storage.set('records', JSON.stringify(records), true);
+    if(!r) console.error('records 저장 실패: storage.set returned null');
+  }catch(e){ console.error('records 저장 오류:', e); }
+}
+async function saveHomework(){
+  try{
+    const r = await window.storage.set('homework', JSON.stringify(homeworkByDate), true);
+    if(!r) console.error('homework 저장 실패: storage.set returned null');
+  }catch(e){ console.error('homework 저장 오류:', e); }
+}
+
+function last14Dates(){
+  const arr = [];
+  for(let i=13;i>=0;i--){
+    const d = new Date();
+    d.setDate(d.getDate()-i);
+    arr.push(d.toISOString().slice(0,10));
+  }
+  return arr;
+}
+
+function updateHomeStats(){
+  const elStudents = document.getElementById('hsStudents');
+  const elAtt = document.getElementById('hsAttendance');
+  const elHw = document.getElementById('hsHomework');
+  if(!elStudents || !elAtt || !elHw) return;
+
+  const total = students.length;
+  let presentToday = 0, hwGoodToday = 0;
+  students.forEach(st => {
+    const rec = records[st.id + ':' + todayKey];
+    if(rec && rec.att === 'good') presentToday++;
+    if(rec && rec.hw === 'good') hwGoodToday++;
+  });
+
+  elStudents.textContent = total + '명';
+  elAtt.textContent = presentToday + ' / ' + total;
+  elHw.textContent = total ? Math.round(hwGoodToday / total * 100) + '%' : '0%';
+}
+
+function render(){
+  const body = document.getElementById('rosterBody');
+  document.getElementById('studentCount').textContent = students.length + '명';
+  updateHomeStats();
+  renderHwItemList();
+  renderHomeClassFrame();
+
+  if(students.length === 0){
+    body.innerHTML = '<tr><td colspan="4"><div class="empty">아직 등록된 학생이 없습니다. 위 "+ 학생 추가" 버튼으로 시작하세요.</div></td></tr>';
+    return;
+  }
+
+  const dates = last14Dates();
+  body.innerHTML = students.map(st => {
+    const key = st.id + ':' + todayKey;
+    const rec = records[key] || {};
+    const attPills = ['good','warn','absent'].map(v => {
+      const label = v==='good' ? '출석' : v==='warn' ? '지각' : '결석';
+      const active = rec.att === v ? `active ${v}` : '';
+      return `<button class="pill ${active}" onclick="setRecord('${st.id}','att','${v}')">${label}</button>`;
+    }).join('');
+    const hwPills = ['good','warn','absent'].map(v => {
+      const label = v==='good' ? '제출' : v==='warn' ? '부분' : '미제출';
+      const active = rec.hw === v ? `active ${v}` : '';
+      return `<button class="pill ${active}" onclick="setRecord('${st.id}','hw','${v}')">${label}</button>`;
+    }).join('');
+
+    const dots = dates.map(d => {
+      const r = records[st.id + ':' + d];
+      const cls = r && r.att ? r.att : '';
+      return `<span class="dot ${cls}" title="${d}"></span>`;
+    }).join('');
+
+    const pinRow = pendingPinId === st.id
+      ? `<div style="margin-top:6px; display:flex; gap:6px;">
+          <input id="pinInput_${st.id}" type="text" inputmode="numeric" maxlength="4" placeholder="4자리 PIN" style="width:90px; border:1px solid var(--line); border-radius:6px; padding:4px 8px; font-size:12.5px;">
+          <button class="link-btn" onclick="savePin('${st.id}')">저장</button>
+         </div>`
+      : '';
+
+    return `<tr>
+      <td class="name-cell">${st.name}<span class="del" onclick="removeStudent('${st.id}')">${pendingDeleteId === st.id ? '한번 더 탭하면 삭제됨' : '삭제'}</span><span class="del" onclick="setPin('${st.id}')">${st.pin ? 'PIN 변경' : 'PIN 설정'}</span>${pinRow}</td>
+      <td><div class="pill-group">${attPills}</div></td>
+      <td><div class="pill-group">${hwPills}</div></td>
+      <td><div class="history">${dots}</div></td>
+      <td style="display:flex; flex-direction:column; gap:5px;">
+        <button class="link-btn" onclick="copyParentLink('${st.id}','${st.name}')">학부모 링크</button>
+        <button class="link-btn" style="border-color:#4A8FB5; color:#4A8FB5;" onclick="copyStudentLink('${st.id}','${st.name}')">학생 링크</button>
+        <button class="link-btn" style="border-color:#1F5C4D; color:#1F5C4D;" onclick="openPlannerFor('${st.id}')">🗓️ 플래너</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+window.setRecord = async function(studentId, field, value){
+  const key = studentId + ':' + todayKey;
+  if(!records[key]) records[key] = {};
+  records[key][field] = records[key][field] === value ? null : value;
+  await saveRecords();
+  render();
+};
+
+let pendingDeleteId = null;
+let pendingPinId = null;
+
+window.setPin = function(id){
+  pendingPinId = pendingPinId === id ? null : id;
+  pendingDeleteId = null;
+  render();
+  if(pendingPinId){
+    setTimeout(() => {
+      const el = document.getElementById('pinInput_' + id);
+      if(el) el.focus();
+    }, 30);
+  }
+};
+
+window.savePin = async function(id){
+  const el = document.getElementById('pinInput_' + id);
+  const val = el ? el.value.trim() : '';
+  if(!/^\d{4}$/.test(val)){
+    if(el){ el.style.borderColor = 'var(--absent)'; el.placeholder = '숫자 4자리 입력'; el.value=''; }
+    return;
+  }
+  const st = students.find(s => s.id === id);
+  if(st) st.pin = val;
+  pendingPinId = null;
+  await saveStudents();
+  render();
+};
+
+window.removeStudent = async function(id){
+  if(pendingDeleteId !== id){
+    pendingDeleteId = id;
+    render();
+    return;
+  }
+  pendingDeleteId = null;
+  students = students.filter(s => s.id !== id);
+  await saveStudents();
+  render();
+};
+
+document.getElementById('toggleAddBtn').addEventListener('click', () => {
+  const form = document.getElementById('newRowForm');
+  form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+  document.getElementById('newName').focus();
+});
+
+document.getElementById('addStudentBtn').addEventListener('click', addStudent);
+document.getElementById('newName').addEventListener('keydown', e => { if(e.key === 'Enter') addStudent(); });
+
+async function addStudent(){
+  const input = document.getElementById('newName');
+  const pinInput = document.getElementById('newPin');
+  const name = input.value.trim();
+  const pin = pinInput.value.trim();
+  if(!name) return;
+  const student = { id: 's' + Date.now(), name };
+  if(pin && /^\d{4}$/.test(pin)) student.pin = pin;
+  students.push(student);
+  await saveStudents();
+  input.value = '';
+  pinInput.value = '';
+  render();
+}
+
+let hwTimer;
+document.getElementById('hwInput').addEventListener('input', (e) => {
+  homeworkByDate[todayKey] = e.target.value;
+  clearTimeout(hwTimer);
+  const msg = document.getElementById('hwSaveMsg');
+  msg.textContent = '저장 중...';
+  hwTimer = setTimeout(async () => {
+    await saveHomework();
+    msg.textContent = '저장됨 ✓';
+    setTimeout(() => msg.textContent = '', 1500);
+  }, 600);
+});
+
+async function saveNotice(){
+  try{
+    const r = await window.storage.set('notice', notice, true);
+    if(!r) console.error('notice 저장 실패: storage.set returned null');
+  }catch(e){ console.error('notice 저장 오류:', e); }
+}
+
+let noticeTimer;
+const noticeInputEl = document.getElementById('noticeInput');
+if(noticeInputEl){
+  noticeInputEl.addEventListener('input', (e) => {
+    notice = e.target.value;
+    clearTimeout(noticeTimer);
+    const msg = document.getElementById('noticeSaveMsg');
+    msg.textContent = '저장 중...';
+    noticeTimer = setTimeout(async () => {
+      await saveNotice();
+      renderNoticeBanner();
+      msg.textContent = '저장됨 ✓';
+      setTimeout(() => msg.textContent = '', 1500);
+    }, 600);
+  });
+}
+
+window.saveAccountSettings = async function(){
+  const idEl = document.getElementById('settingsId');
+  const pwEl = document.getElementById('settingsPw');
+  const pwConfirmEl = document.getElementById('settingsPwConfirm');
+  const msg = document.getElementById('settingsSaveMsg');
+  const id = idEl.value.trim();
+  const pw = pwEl.value;
+  const pwConfirm = pwConfirmEl.value;
+
+  if(!id){
+    msg.textContent = '아이디를 입력해주세요.';
+    msg.style.color = 'var(--absent)';
+    return;
+  }
+  if(!pw && !teacherAuth){
+    msg.textContent = '비밀번호를 입력해주세요.';
+    msg.style.color = 'var(--absent)';
+    return;
+  }
+  if(pw && pw.length < 4){
+    msg.textContent = '비밀번호는 4자 이상으로 설정해주세요.';
+    msg.style.color = 'var(--absent)';
+    return;
+  }
+  if(pw && pw !== pwConfirm){
+    msg.textContent = '비밀번호가 일치하지 않습니다.';
+    msg.style.color = 'var(--absent)';
+    return;
+  }
+
+  teacherAuth = { id, pw: pw ? pw : (teacherAuth ? teacherAuth.pw : '') };
+  try{
+    await window.storage.set('teacherAuth', JSON.stringify(teacherAuth), true);
+    msg.style.color = 'var(--good)';
+    msg.textContent = '저장됨 ✓';
+    pwEl.value = '';
+    pwConfirmEl.value = '';
+    setTimeout(() => msg.textContent = '', 1500);
+  }catch(e){
+    console.error('teacherAuth 저장 오류:', e);
+    msg.style.color = 'var(--absent)';
+    msg.textContent = '저장에 실패했습니다.';
+  }
+};
+
+// ---- Schedule / calendar ----
+function schedTypeLabel(type){
+  return type === 'exam' ? '시험' : type === 'test' ? '테스트' : type === 'vacation' ? '방학' : '기타';
+}
+
+function populateSchedStudentSelect(){
+  const sel = document.getElementById('schedStudentSelect');
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="all">🏫 전체 학생 (방학·휴원 등)</option>' +
+    students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  if(prev && (prev === 'all' || students.some(s => s.id === prev))) sel.value = prev;
+}
+
+window.selectSchedType = function(type){
+  selectedSchedType = type;
+  document.querySelectorAll('#schedTypeGrid .sched-type-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.type === type);
+  });
+};
+
+async function saveSchedule(){
+  try{
+    const r = await window.storage.set('schedule', JSON.stringify(schedule), true);
+    if(!r) console.error('schedule 저장 실패: storage.set returned null');
+  }catch(e){ console.error('schedule 저장 오류:', e); }
+}
+
+window.addScheduleEvent = async function(){
+  const studentSel = document.getElementById('schedStudentSelect');
+  const dateEl = document.getElementById('schedDate');
+  const titleEl = document.getElementById('schedTitle');
+  const msg = document.getElementById('schedSaveMsg');
+
+  const date = dateEl.value;
+  const title = titleEl.value.trim();
+
+  if(!date){ msg.style.color = 'var(--absent)'; msg.textContent = '날짜를 선택해주세요.'; return; }
+  if(!title){ msg.style.color = 'var(--absent)'; msg.textContent = '내용을 입력해주세요.'; return; }
+
+  schedule.push({
+    id: 'e' + Date.now(),
+    studentId: studentSel.value,
+    type: selectedSchedType,
+    date,
+    title
+  });
+  await saveSchedule();
+  titleEl.value = '';
+  dateEl.value = '';
+  msg.style.color = 'var(--good)';
+  msg.textContent = '추가됨 ✓';
+  setTimeout(() => msg.textContent = '', 1500);
+  renderScheduleList();
+  renderNoticeBanner();
+};
+
+window.deleteScheduleEvent = async function(id){
+  schedule = schedule.filter(e => e.id !== id);
+  await saveSchedule();
+  renderScheduleList();
+};
+
+function renderScheduleList(){
+  const list = document.getElementById('schedList');
+  if(!list) return;
+  if(schedule.length === 0){
+    list.innerHTML = '<div class="sched-empty">등록된 일정이 없습니다.</div>';
+    return;
+  }
+  const sorted = [...schedule].sort((a,b) => a.date.localeCompare(b.date));
+  list.innerHTML = sorted.map(ev => {
+    const who = ev.studentId === 'all' ? '전체 학생' : (students.find(s => s.id === ev.studentId)?.name || '알 수 없음');
+    const md = ev.date.slice(5).replace('-', '.');
+    return `<div class="sched-item">
+      <div class="sched-date">${md}</div>
+      <div class="sched-body">
+        <div class="sched-title">${ev.title}</div>
+        <div class="sched-meta"><span class="sched-badge ${ev.type}">${schedTypeLabel(ev.type)}</span>${who}</div>
+      </div>
+      <div class="sched-del" onclick="deleteScheduleEvent('${ev.id}')">삭제</div>
+    </div>`;
+  }).join('');
+}
+
+function studentScheduleHtml(studentId){
+  const today = new Date().toISOString().slice(0,10);
+  const upcoming = schedule
+    .filter(ev => (ev.studentId === studentId || ev.studentId === 'all') && ev.date >= today)
+    .sort((a,b) => a.date.localeCompare(b.date))
+    .slice(0, 6);
+  if(upcoming.length === 0){
+    return '<div class="sched-empty">다가오는 일정이 없습니다.</div>';
+  }
+  return '<div class="sched-list">' + upcoming.map(ev => {
+    const md = ev.date.slice(5).replace('-', '.');
+    const who = ev.studentId === 'all' ? '전체 학생' : '';
+    return `<div class="sched-item">
+      <div class="sched-date">${md}</div>
+      <div class="sched-body">
+        <div class="sched-title">${ev.title}</div>
+        <div class="sched-meta"><span class="sched-badge ${ev.type}">${schedTypeLabel(ev.type)}</span>${who}</div>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+
+// ---- Study time (순공시간) ----
+async function saveStudyTime(){
+  try{
+    const r = await window.storage.set('studyTime', JSON.stringify(studyTimeByDate), true);
+    if(!r) console.error('studyTime 저장 실패: storage.set returned null');
+  }catch(e){ console.error('studyTime 저장 오류:', e); }
+}
+
+async function addStudyTime(studentId, secs){
+  if(!studentId || !secs) return;
+  const key = studentId + ':' + todayKey;
+  studyTimeByDate[key] = (studyTimeByDate[key] || 0) + secs;
+  await saveStudyTime();
+}
+
+function studentStudyTimeSummary(studentId){
+  const dates = last14Dates();
+  let last7 = 0, last14 = 0;
+  dates.forEach((d, i) => {
+    const secs = studyTimeByDate[studentId + ':' + d] || 0;
+    last14 += secs;
+    if(i >= 7) last7 += secs; // last 7 entries in a 14-day array (index 7~13) are the most recent 7 days
+  });
+  return { last7, last14 };
+}
+
+// ---- Progress notes (진도) ----
+async function saveProgress(){
+  try{
+    const r = await window.storage.set('progress', JSON.stringify(progressByStudent), true);
+    if(!r) console.error('progress 저장 실패: storage.set returned null');
+  }catch(e){ console.error('progress 저장 오류:', e); }
+}
+
+// ---- Test scores (시험 점수) ----
+async function saveTestScores(){
+  try{
+    const r = await window.storage.set('testScores', JSON.stringify(testScores), true);
+    if(!r) console.error('testScores 저장 실패: storage.set returned null');
+  }catch(e){ console.error('testScores 저장 오류:', e); }
+}
+
+function populateReportStudentSelect(){
+  const sel = document.getElementById('reportStudentSelect');
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  if(prev && students.some(s => s.id === prev)) sel.value = prev;
+}
+
+window.renderReportForSelected = function(){
+  const sel = document.getElementById('reportStudentSelect');
+  if(!sel || !sel.value) return;
+  renderReportForStudent(sel.value);
+};
+
+function renderReportForStudent(studentId){
+  const progressInput = document.getElementById('reportProgressInput');
+  const scoreList = document.getElementById('reportScoreList');
+  if(progressInput) progressInput.value = progressByStudent[studentId] || '';
+  if(scoreList){
+    const rows = testScores.filter(t => t.studentId === studentId).sort((a,b) => b.date.localeCompare(a.date));
+    scoreList.innerHTML = rows.length === 0
+      ? '<div class="sched-empty">등록된 시험 점수가 없습니다.</div>'
+      : rows.map(t => `
+        <div class="sched-item">
+          <div class="sched-date">${t.date.slice(5).replace('-', '.')}</div>
+          <div class="sched-body">
+            <div class="sched-title">${t.title}</div>
+            <div class="sched-meta">${t.score} / ${t.maxScore}점</div>
+          </div>
+          <div class="sched-del" onclick="deleteTestScore('${t.id}')">삭제</div>
+        </div>
+      `).join('');
+  }
+}
+
+let progressTimer;
+window.onProgressInput = function(e){
+  const sel = document.getElementById('reportStudentSelect');
+  if(!sel || !sel.value) return;
+  progressByStudent[sel.value] = e.target.value;
+  clearTimeout(progressTimer);
+  const msg = document.getElementById('reportProgressMsg');
+  if(msg) msg.textContent = '저장 중...';
+  progressTimer = setTimeout(async () => {
+    await saveProgress();
+    if(msg){ msg.textContent = '저장됨 ✓'; setTimeout(() => msg.textContent = '', 1500); }
+  }, 600);
+};
+
+window.addTestScore = async function(){
+  const sel = document.getElementById('reportStudentSelect');
+  const titleEl = document.getElementById('reportScoreTitle');
+  const scoreEl = document.getElementById('reportScoreValue');
+  const maxEl = document.getElementById('reportScoreMax');
+  const dateEl = document.getElementById('reportScoreDate');
+  const msg = document.getElementById('reportScoreMsg');
+
+  const studentId = sel.value;
+  const title = titleEl.value.trim();
+  const score = Number(scoreEl.value);
+  const maxScore = Number(maxEl.value) || 100;
+  const date = dateEl.value || todayKey;
+
+  if(!studentId){ msg.style.color = 'var(--absent)'; msg.textContent = '학생을 선택해주세요.'; return; }
+  if(!title){ msg.style.color = 'var(--absent)'; msg.textContent = '시험 이름을 입력해주세요.'; return; }
+  if(!scoreEl.value || isNaN(score)){ msg.style.color = 'var(--absent)'; msg.textContent = '점수를 입력해주세요.'; return; }
+
+  testScores.push({ id: 't' + Date.now(), studentId, title, score, maxScore, date });
+  await saveTestScores();
+  titleEl.value = ''; scoreEl.value = ''; maxEl.value = ''; dateEl.value = '';
+  msg.style.color = 'var(--good)'; msg.textContent = '추가됨 ✓';
+  setTimeout(() => msg.textContent = '', 1500);
+  renderReportForStudent(studentId);
+};
+
+window.deleteTestScore = async function(id){
+  testScores = testScores.filter(t => t.id !== id);
+  await saveTestScores();
+  const sel = document.getElementById('reportStudentSelect');
+  if(sel && sel.value) renderReportForStudent(sel.value);
+};
+
+function parentReportHtml(studentId){
+  const { last7, last14 } = studentStudyTimeSummary(studentId);
+  const progress = progressByStudent[studentId] || '아직 등록된 진도 내용이 없습니다.';
+  const scores = testScores.filter(t => t.studentId === studentId).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 5);
+
+  const scoreRows = scores.length === 0
+    ? '<div class="sched-empty">등록된 시험 점수가 없습니다.</div>'
+    : scores.map(t => `
+      <div class="sched-item">
+        <div class="sched-date">${t.date.slice(5).replace('-', '.')}</div>
+        <div class="sched-body">
+          <div class="sched-title">${t.title}</div>
+          <div class="sched-meta">${t.score} / ${t.maxScore}점 (${Math.round(t.score/t.maxScore*100)}%)</div>
+        </div>
+      </div>
+    `).join('');
+
+  return `
+    <div class="report-title">📊 ${students.find(s=>s.id===studentId)?.name || ''} 학생 리포트</div>
+    <div class="report-sub">학부모님께만 표시되는 화면입니다.</div>
+
+    <div class="home-stat-row" style="margin-top:12px;">
+      <div class="home-stat">
+        <div class="hs-value">${formatSeconds(last7).slice(0,5)}</div>
+        <div class="hs-label">최근 7일 순공시간</div>
+      </div>
+      <div class="home-stat">
+        <div class="hs-value">${formatSeconds(last14).slice(0,5)}</div>
+        <div class="hs-label">최근 14일 순공시간</div>
+      </div>
+    </div>
+
+    <div class="settings-field">
+      <label>📈 학습 진도</label>
+      <div class="hw-text-display">${progress}</div>
+    </div>
+
+    <div class="settings-field" style="margin-bottom:0;">
+      <label>📝 최근 시험 점수</label>
+      <div class="sched-list">${scoreRows}</div>
+    </div>
+  `;
+}
+
+// ---- Student planner ----
+async function saveDefaultDday(){
+  const titleEl = document.getElementById('defaultDdayTitle');
+  const dateEl = document.getElementById('defaultDdayDate');
+  const msg = document.getElementById('defaultDdaySaveMsg');
+  const title = titleEl.value.trim();
+  const date = dateEl.value;
+  defaultDDay = (title && date) ? { title, date } : null;
+  try{
+    await window.storage.set('defaultDDay', JSON.stringify(defaultDDay), true);
+    msg.style.color = 'var(--good)';
+    msg.textContent = '저장됨 ✓';
+    setTimeout(() => msg.textContent = '', 1500);
+  }catch(e){
+    console.error('defaultDDay 저장 오류:', e);
+    msg.style.color = 'var(--absent)';
+    msg.textContent = '저장에 실패했습니다.';
+  }
+}
+window.saveDefaultDday = saveDefaultDday;
+
+async function savePlanEntries(){
+  try{
+    const r = await window.storage.set('planEntries', JSON.stringify(planEntries), true);
+    if(!r) console.error('planEntries 저장 실패: storage.set returned null');
+  }catch(e){ console.error('planEntries 저장 오류:', e); }
+}
+async function saveStudentDDay(){
+  try{
+    const r = await window.storage.set('studentDDay', JSON.stringify(studentDDay), true);
+    if(!r) console.error('studentDDay 저장 실패: storage.set returned null');
+  }catch(e){ console.error('studentDDay 저장 오류:', e); }
+}
+async function saveParentVisible(){
+  try{
+    const r = await window.storage.set('parentVisible', JSON.stringify(parentVisible), true);
+    if(!r) console.error('parentVisible 저장 실패: storage.set returned null');
+  }catch(e){ console.error('parentVisible 저장 오류:', e); }
+}
+
+function getWeekRange(){
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun..6=Sat
+  const diffToMon = day === 0 ? -6 : 1 - day;
+  const mon = new Date(now);
+  mon.setDate(now.getDate() + diffToMon);
+  const dates = [];
+  for(let i=0;i<7;i++){
+    const d = new Date(mon);
+    d.setDate(mon.getDate()+i);
+    dates.push(d.toISOString().slice(0,10));
+  }
+  return dates;
+}
+
+function ddayText(dday){
+  if(!dday || !dday.date) return null;
+  const today = new Date(todayKey + 'T00:00:00');
+  const target = new Date(dday.date + 'T00:00:00');
+  const diff = Math.round((target - today) / (1000*60*60*24));
+  const label = diff === 0 ? 'D-Day' : diff > 0 ? `D-${diff}` : `D+${-diff}`;
+  return `${label} · ${dday.title} (${dday.date})`;
+}
+
+function populatePlannerStudentSelect(){
+  const sel = document.getElementById('plannerStudentSelect');
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  if(prev && students.some(s => s.id === prev)) sel.value = prev;
+}
+
+window.renderPlannerForSelected = function(){
+  const sel = document.getElementById('plannerStudentSelect');
+  const content = document.getElementById('plannerContent');
+  if(students.length === 0){
+    if(content) content.innerHTML = '<div class="empty">등록된 학생이 없습니다.</div>';
+    return;
+  }
+  const studentId = sel ? (sel.value || students[0].id) : students[0].id;
+  renderPlannerForStudent(studentId);
+};
+
+function renderPlannerForStudent(studentId){
+  const content = document.getElementById('plannerContent');
+  const student = students.find(s => s.id === studentId);
+  if(!content) return;
+  if(!student){ content.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
+
+  const { last7 } = studentStudyTimeSummary(studentId);
+  const todaySecs = studyTimeByDate[studentId + ':' + todayKey] || 0;
+  const todayPlans = planEntries.filter(p => p.studentId === studentId && p.date === todayKey);
+  const todayDone = todayPlans.filter(p => p.done).length;
+
+  const isVisible = !!parentVisible[studentId];
+  const dday = studentDDay[studentId];
+  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
+  const ddayLine = ddayText(effectiveDday);
+
+  const weekDates = getWeekRange();
+  const weekPlans = planEntries
+    .filter(p => p.studentId === studentId && weekDates.includes(p.date))
+    .sort((a,b) => a.date.localeCompare(b.date));
+
+  const weekListHtml = weekPlans.length === 0
+    ? '<div class="sched-empty">이번 주 작성된 계획이 없습니다.</div>'
+    : weekPlans.map(p => `
+      <div class="plan-item ${p.done ? 'done' : ''}">
+        <input type="checkbox" class="plan-check" ${p.done ? 'checked' : ''} onchange="togglePlanDone('${p.id}')">
+        <div class="plan-date">${p.date.slice(5).replace('-','.')}</div>
+        <div class="plan-title">${p.title}</div>
+        <div class="sched-del" onclick="deletePlanEntry('${p.id}')">삭제</div>
+      </div>
+    `).join('');
+
+  content.innerHTML = `
+    <div class="settings-card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+        <div>
+          <div class="planner-stat-row">⏱️ 오늘 순공: <b>${formatSeconds(todaySecs)}</b></div>
+          <div class="planner-stat-row">✅ 오늘 달성률: <b>${todayDone} / ${todayPlans.length}</b></div>
+        </div>
+        <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+          <button class="planner-toggle-btn ${isVisible ? 'on' : ''}" onclick="toggleParentVisible('${studentId}')">${isVisible ? '🔓 학부모 공개 ✓' : '🔒 학부모 공개 X'}</button>
+          <button class="planner-delete-btn" onclick="plannerDeleteStudent('${studentId}')">🗑 학생 삭제</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3>📆 학생 맞춤 D-Day 설정</h3>
+      <div class="settings-field">
+        <input id="plannerDdayTitle" type="text" placeholder="예: 1학기 중간고사" value="${dday ? dday.title : ''}">
+      </div>
+      <div class="settings-field">
+        <input id="plannerDdayDate" type="date" value="${dday ? dday.date : ''}">
+      </div>
+      <button class="settings-save-btn" style="width:100%; background:var(--good); text-align:center;" onclick="savePlannerDday('${studentId}')">학생 전용 D-Day 저장</button>
+      <div class="settings-desc" style="text-align:center; margin-top:8px; margin-bottom:0;">비워두고 저장 시 전체 기본 D-Day가 표시됩니다.</div>
+      ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
+    </div>
+
+    <div class="settings-card">
+      <h3>🗓️ 이번 주 계획</h3>
+      <div class="sched-list">${weekListHtml}</div>
+      <div class="plan-add-row">
+        <input id="plannerPlanDate" type="date" value="${todayKey}">
+        <input id="plannerPlanTitle" type="text" placeholder="계획 내용 (예: 수학의 정석 p.90~95)">
+      </div>
+      <button class="settings-save-btn" style="width:100%; margin-top:8px;" onclick="addPlanEntry('${studentId}')">계획 추가</button>
+    </div>
+  `;
+}
+
+window.toggleParentVisible = async function(studentId){
+  parentVisible[studentId] = !parentVisible[studentId];
+  await saveParentVisible();
+  renderPlannerForStudent(studentId);
+};
+
+window.plannerDeleteStudent = async function(studentId){
+  const student = students.find(s => s.id === studentId);
+  if(!student) return;
+  if(!confirm(student.name + ' 학생을 삭제할까요? 되돌릴 수 없습니다.')) return;
+  students = students.filter(s => s.id !== studentId);
+  await saveStudents();
+  render();
+  populatePlannerStudentSelect();
+  window.renderPlannerForSelected();
+};
+
+window.savePlannerDday = async function(studentId){
+  const titleEl = document.getElementById('plannerDdayTitle');
+  const dateEl = document.getElementById('plannerDdayDate');
+  const title = titleEl.value.trim();
+  const date = dateEl.value;
+  if(title && date){
+    studentDDay[studentId] = { title, date };
+  } else {
+    delete studentDDay[studentId];
+  }
+  await saveStudentDDay();
+  renderPlannerForStudent(studentId);
+};
+
+window.addPlanEntry = async function(studentId){
+  const dateEl = document.getElementById('plannerPlanDate');
+  const titleEl = document.getElementById('plannerPlanTitle');
+  const date = dateEl.value || todayKey;
+  const title = titleEl.value.trim();
+  if(!title) return;
+  planEntries.push({ id: 'p' + Date.now(), studentId, date, title, done: false });
+  await savePlanEntries();
+  renderPlannerForStudent(studentId);
+};
+
+window.togglePlanDone = async function(id){
+  const entry = planEntries.find(p => p.id === id);
+  if(!entry) return;
+  entry.done = !entry.done;
+  await savePlanEntries();
+  renderPlannerForStudent(entry.studentId);
+};
+
+window.deletePlanEntry = async function(id){
+  const entry = planEntries.find(p => p.id === id);
+  planEntries = planEntries.filter(p => p.id !== id);
+  await savePlanEntries();
+  if(entry) renderPlannerForStudent(entry.studentId);
+};
+
+function parentPlannerHtml(studentId){
+  if(!parentVisible[studentId]){
+    return '<div class="sched-empty">🔒 선생님이 아직 플래너 공개를 설정하지 않았습니다.</div>';
+  }
+  const { last7 } = studentStudyTimeSummary(studentId);
+  const todaySecs = studyTimeByDate[studentId + ':' + todayKey] || 0;
+  const todayPlans = planEntries.filter(p => p.studentId === studentId && p.date === todayKey);
+  const todayDone = todayPlans.filter(p => p.done).length;
+  const dday = studentDDay[studentId];
+  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
+  const ddayLine = ddayText(effectiveDday);
+
+  const weekDates = getWeekRange();
+  const weekPlans = planEntries
+    .filter(p => p.studentId === studentId && weekDates.includes(p.date))
+    .sort((a,b) => a.date.localeCompare(b.date));
+  const weekListHtml = weekPlans.length === 0
+    ? '<div class="sched-empty">이번 주 작성된 계획이 없습니다.</div>'
+    : weekPlans.map(p => `
+      <div class="plan-item ${p.done ? 'done' : ''}">
+        <span style="width:19px; flex-shrink:0; text-align:center;">${p.done ? '✅' : '⬜'}</span>
+        <div class="plan-date">${p.date.slice(5).replace('-','.')}</div>
+        <div class="plan-title">${p.title}</div>
+      </div>
+    `).join('');
+
+  return `
+    <div class="planner-stat-row">⏱️ 오늘 순공: <b>${formatSeconds(todaySecs)}</b></div>
+    <div class="planner-stat-row">✅ 오늘 달성률: <b>${todayDone} / ${todayPlans.length}</b></div>
+    ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
+    <div class="settings-field" style="margin-top:14px; margin-bottom:0;">
+      <label>🗓️ 이번 주 계획</label>
+      <div class="sched-list">${weekListHtml}</div>
+    </div>
+  `;
+}
+
+// ---- Q&A ----
+async function saveQuestions(){
+  try{
+    const r = await window.storage.set('questions', JSON.stringify(questions), true);
+    if(!r) console.error('questions 저장 실패: storage.set returned null');
+  }catch(e){ console.error('questions 저장 오류:', e); }
+}
+
+function updateQnaBadges(){
+  const pending = questions.filter(q => !q.answer).length;
+  const sideBadge = document.getElementById('qnaSideBadge');
+  if(sideBadge){
+    if(pending > 0){ sideBadge.style.display = ''; sideBadge.textContent = pending + '건'; }
+    else { sideBadge.style.display = 'none'; }
+  }
+  const qaDesc = document.getElementById('qnaQaDesc');
+  if(qaDesc){
+    qaDesc.textContent = pending > 0 ? `미답변 질문 ${pending}건` : '학생 질문에 답변하기';
+  }
+}
+
+window.submitStudentQuestion = async function(studentId){
+  const input = document.getElementById('studentQuestionInput');
+  const text = input.value.trim();
+  if(!text) return;
+  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null });
+  await saveQuestions();
+  updateQnaBadges();
+  input.value = '';
+  renderStudentViewForId(studentId);
+};
+
+function studentQnaListHtml(studentId){
+  const mine = questions.filter(q => q.studentId === studentId).sort((a,b) => b.date.localeCompare(a.date));
+  if(mine.length === 0) return '<div class="sched-empty">아직 남긴 질문이 없습니다.</div>';
+  return mine.map(q => `
+    <div class="qna-item">
+      <div class="qna-top"><span class="qna-date">${q.date}</span></div>
+      <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
+      <div class="qna-question">${q.text}</div>
+      ${q.answer ? `<div class="qna-answer-display">👩‍🏫 ${q.answer}</div>` : ''}
+    </div>
+  `).join('');
+}
+
+window.renderQnaTeacherList = function(){
+  const list = document.getElementById('qnaTeacherList');
+  if(!list) return;
+  if(questions.length === 0){
+    list.innerHTML = '<div class="sched-empty">등록된 질문이 없습니다.</div>';
+    return;
+  }
+  const sorted = [...questions].sort((a,b) => {
+    if(!!a.answer !== !!b.answer) return a.answer ? 1 : -1; // unanswered first
+    return b.date.localeCompare(a.date);
+  });
+  list.innerHTML = sorted.map(q => {
+    const student = students.find(s => s.id === q.studentId);
+    const who = student ? student.name : '알 수 없음';
+    const answerBlock = q.answer
+      ? `<div class="qna-answer-display">👩‍🏫 ${q.answer}</div>
+         <span class="qna-edit-link" onclick="startEditAnswer('${q.id}')">답변 수정</span>`
+      : `<div class="qna-answer-box" id="answerBox_${q.id}">
+           <textarea id="answerInput_${q.id}" placeholder="답변을 입력하세요"></textarea>
+           <button class="qna-answer-btn" onclick="answerQuestion('${q.id}')">등록</button>
+         </div>`;
+    return `
+      <div class="qna-item">
+        <div class="qna-top">
+          <span class="qna-student">${who}</span>
+          <span class="qna-date">${q.date}</span>
+        </div>
+        <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
+        <div class="qna-question">${q.text}</div>
+        <div id="answerArea_${q.id}">${answerBlock}</div>
+      </div>
+    `;
+  }).join('');
+};
+
+window.startEditAnswer = function(id){
+  const q = questions.find(x => x.id === id);
+  if(!q) return;
+  const area = document.getElementById('answerArea_' + id);
+  if(!area) return;
+  area.innerHTML = `
+    <div class="qna-answer-box" id="answerBox_${id}">
+      <textarea id="answerInput_${id}">${q.answer}</textarea>
+      <button class="qna-answer-btn" onclick="answerQuestion('${id}')">저장</button>
+    </div>
+  `;
+};
+
+window.answerQuestion = async function(id){
+  const input = document.getElementById('answerInput_' + id);
+  if(!input) return;
+  const answer = input.value.trim();
+  if(!answer) return;
+  const q = questions.find(x => x.id === id);
+  if(!q) return;
+  q.answer = answer;
+  q.answeredAt = todayKey;
+  await saveQuestions();
+  updateQnaBadges();
+  window.renderQnaTeacherList();
+};
+
+// ---- Homework checklist (과제별 체크) ----
+async function saveHomeworkItems(){
+  try{
+    const r = await window.storage.set('homeworkItems', JSON.stringify(homeworkItems), true);
+    if(!r) console.error('homeworkItems 저장 실패: storage.set returned null');
+  }catch(e){ console.error('homeworkItems 저장 오류:', e); }
+}
+async function saveHomeworkItemChecks(){
+  try{
+    const r = await window.storage.set('homeworkItemChecks', JSON.stringify(homeworkItemChecks), true);
+    if(!r) console.error('homeworkItemChecks 저장 실패: storage.set returned null');
+  }catch(e){ console.error('homeworkItemChecks 저장 오류:', e); }
+}
+function todaysHomeworkItems(){
+  return homeworkItems.filter(i => i.date === todayKey);
+}
+
+window.addHomeworkItem = async function(){
+  const input = document.getElementById('hwItemInput');
+  const text = input.value.trim();
+  if(!text) return;
+  homeworkItems.push({ id: 'h' + Date.now(), date: todayKey, text });
+  await saveHomeworkItems();
+  input.value = '';
+  renderHwItemList();
+};
+
+window.deleteHomeworkItem = async function(id){
+  homeworkItems = homeworkItems.filter(i => i.id !== id);
+  await saveHomeworkItems();
+  renderHwItemList();
+};
+
+function renderHwItemList(){
+  const list = document.getElementById('hwItemList');
+  if(!list) return;
+  const items = todaysHomeworkItems();
+  if(items.length === 0){
+    list.innerHTML = '<div class="sched-empty">오늘 등록된 숙제 항목이 없습니다.</div>';
+    return;
+  }
+  list.innerHTML = items.map(item => {
+    const doneCount = students.filter(s => homeworkItemChecks[s.id + ':' + item.id]).length;
+    return `<div class="plan-item">
+      <div class="plan-title">${item.text}</div>
+      <div class="qna-date">${doneCount}/${students.length}명 완료</div>
+      <div class="sched-del" onclick="deleteHomeworkItem('${item.id}')">삭제</div>
+    </div>`;
+  }).join('');
+}
+
+function recomputeHwStatus(studentId){
+  const items = todaysHomeworkItems();
+  if(items.length === 0) return; // no items today: leave manual status untouched
+  const doneCount = items.filter(i => homeworkItemChecks[studentId + ':' + i.id]).length;
+  const key = studentId + ':' + todayKey;
+  if(!records[key]) records[key] = {};
+  records[key].hw = doneCount === items.length ? 'good' : doneCount > 0 ? 'warn' : null;
+}
+
+window.toggleHwItemCheck = async function(studentId, itemId){
+  const key = studentId + ':' + itemId;
+  homeworkItemChecks[key] = !homeworkItemChecks[key];
+  await saveHomeworkItemChecks();
+  recomputeHwStatus(studentId);
+  await saveRecords();
+  renderHwItemList();
+  render();
+  renderStudentViewForId(studentId);
+};
+
+function hwChecklistStudentHtml(studentId){
+  const items = todaysHomeworkItems();
+  if(items.length === 0) return '';
+  return `
+    <div class="hw-card">
+      <label>✅ 오늘 숙제 체크리스트</label>
+      <div class="sched-list" style="margin-top:8px;">
+        ${items.map(item => {
+          const checked = !!homeworkItemChecks[studentId + ':' + item.id];
+          return `<div class="plan-item ${checked ? 'done' : ''}">
+            <input type="checkbox" class="plan-check" ${checked ? 'checked' : ''} onchange="toggleHwItemCheck('${studentId}','${item.id}')">
+            <div class="plan-title">${item.text}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function hwChecklistParentHtml(studentId){
+  const items = todaysHomeworkItems();
+  if(items.length === 0) return '';
+  return `
+    <div class="settings-field" style="margin-top:14px; margin-bottom:0;">
+      <label>✅ 오늘 숙제 체크리스트</label>
+      <div class="sched-list">
+        ${items.map(item => {
+          const checked = !!homeworkItemChecks[studentId + ':' + item.id];
+          return `<div class="plan-item ${checked ? 'done' : ''}">
+            <span style="width:19px; flex-shrink:0; text-align:center;">${checked ? '✅' : '⬜'}</span>
+            <div class="plan-title">${item.text}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ---- Class management (반 관리) ----
+async function saveClasses(){
+  try{
+    const r = await window.storage.set('classes', JSON.stringify(classes), true);
+    if(!r) console.error('classes 저장 실패: storage.set returned null');
+  }catch(e){ console.error('classes 저장 오류:', e); }
+}
+async function saveClassOf(){
+  try{
+    const r = await window.storage.set('classOf', JSON.stringify(classOf), true);
+    if(!r) console.error('classOf 저장 실패: storage.set returned null');
+  }catch(e){ console.error('classOf 저장 오류:', e); }
+}
+async function saveClassComments(){
+  try{
+    const r = await window.storage.set('classComments', JSON.stringify(classComments), true);
+    if(!r) console.error('classComments 저장 실패: storage.set returned null');
+  }catch(e){ console.error('classComments 저장 오류:', e); }
+}
+
+function studentsInClass(classId){
+  return students.filter(s => classOf[s.id] === classId);
+}
+
+function renderHomeClassFrame(){
+  const frame = document.getElementById('homeClassFrame');
+  if(!frame) return;
+  if(classes.length === 0){
+    frame.innerHTML = '<div class="sched-empty">등록된 반이 없습니다. "반 관리"에서 반을 만들어보세요.</div>';
+    return;
+  }
+  frame.innerHTML = '<div class="class-chip-row">' + classes.map(c => {
+    const count = studentsInClass(c.id).length;
+    return `<div class="class-chip" onclick="openClass('${c.id}')">${c.name}<span class="count">${count}명</span></div>`;
+  }).join('') + '</div>';
+}
+
+window.openClass = function(classId){
+  setMode('class');
+  const sel = document.getElementById('classSelect');
+  if(sel){ sel.value = classId; }
+  renderClassDetail(classId);
+};
+
+window.addClass = async function(){
+  const input = document.getElementById('newClassName');
+  const name = input.value.trim();
+  if(!name) return;
+  classes.push({ id: 'c' + Date.now(), name });
+  await saveClasses();
+  input.value = '';
+  populateClassSelect();
+  renderClassList();
+  renderHomeClassFrame();
+};
+
+window.deleteClass = async function(classId){
+  const cls = classes.find(c => c.id === classId);
+  if(!cls) return;
+  if(!confirm(`"${cls.name}" 반을 삭제할까요? 배정된 학생 정보도 함께 해제됩니다.`)) return;
+  classes = classes.filter(c => c.id !== classId);
+  Object.keys(classOf).forEach(sid => { if(classOf[sid] === classId) delete classOf[sid]; });
+  classComments = classComments.filter(cm => cm.classId !== classId);
+  await saveClasses();
+  await saveClassOf();
+  await saveClassComments();
+  populateClassSelect();
+  renderClassList();
+  renderHomeClassFrame();
+  document.getElementById('classDetail').innerHTML = '';
+};
+
+function populateClassSelect(){
+  const sel = document.getElementById('classSelect');
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">반을 선택하세요</option>' + classes.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  if(prev && classes.some(c => c.id === prev)) sel.value = prev;
+}
+
+function renderClassList(){
+  const list = document.getElementById('classListArea');
+  if(!list) return;
+  if(classes.length === 0){
+    list.innerHTML = '<div class="sched-empty">등록된 반이 없습니다.</div>';
+    return;
+  }
+  list.innerHTML = classes.map(c => `
+    <div class="class-list-item">
+      <div><span class="cname">${c.name}</span><span class="ccount">${studentsInClass(c.id).length}명</span></div>
+      <div class="sched-del" onclick="deleteClass('${c.id}')">삭제</div>
+    </div>
+  `).join('');
+}
+
+window.onClassSelectChange = function(){
+  const sel = document.getElementById('classSelect');
+  renderClassDetail(sel ? sel.value : '');
+};
+
+function renderClassDetail(classId){
+  const detail = document.getElementById('classDetail');
+  if(!detail) return;
+  if(!classId){ detail.innerHTML = ''; return; }
+  const cls = classes.find(c => c.id === classId);
+  if(!cls){ detail.innerHTML = ''; return; }
+
+  const studentRows = students.map(s => `
+    <div class="class-student-row">
+      <input type="checkbox" ${classOf[s.id] === classId ? 'checked' : ''} onchange="toggleClassStudent('${classId}','${s.id}')">
+      <div style="flex:1; font-size:13.5px; font-weight:600;">${s.name}</div>
+      ${classOf[s.id] && classOf[s.id] !== classId ? `<span class="qna-date">${classes.find(c=>c.id===classOf[s.id])?.name || ''} 소속</span>` : ''}
+    </div>
+  `).join('');
+
+  const comments = classComments.filter(cm => cm.classId === classId).sort((a,b) => b.date.localeCompare(a.date));
+  const commentsHtml = comments.length === 0
+    ? '<div class="sched-empty">등록된 코멘트가 없습니다.</div>'
+    : comments.map(cm => `
+      <div class="class-comment-item">
+        <div class="class-comment-text">${cm.text}</div>
+        <div class="class-comment-meta"><span>${cm.date}</span><span class="sched-del" onclick="deleteClassComment('${cm.id}')">삭제</span></div>
+      </div>
+    `).join('');
+
+  detail.innerHTML = `
+    <div class="settings-card">
+      <h3>👥 ${cls.name} · 학생 배정</h3>
+      <div class="settings-desc">체크한 학생이 이 반에 배정됩니다. 한 학생은 하나의 반에만 속할 수 있어요.</div>
+      ${studentRows}
+    </div>
+
+    <div class="settings-card">
+      <h3>📋 ${cls.name} · 오늘 숙제 현황</h3>
+      <div class="sched-list">${classHomeworkStatusHtml(classId)}</div>
+    </div>
+
+    <div class="settings-card">
+      <h3>💬 ${cls.name} · 코멘트</h3>
+      <div class="settings-desc">이 반 학생·학부모 화면에 표시됩니다.</div>
+      <div class="qna-ask-row">
+        <textarea id="classCommentInput" placeholder="예: 이번 주는 다항식 단원 위주로 진행합니다."></textarea>
+        <button class="qna-answer-btn" onclick="addClassComment('${classId}')">등록</button>
+      </div>
+      <div style="margin-top:12px;">${commentsHtml}</div>
+    </div>
+  `;
+}
+
+function classHomeworkStatusHtml(classId){
+  const roster = studentsInClass(classId);
+  if(roster.length === 0) return '<div class="sched-empty">이 반에 배정된 학생이 없습니다.</div>';
+  return roster.map(s => {
+    const rec = records[s.id + ':' + todayKey] || {};
+    return `<div class="plan-item">
+      <div class="plan-title">${s.name}</div>
+      <span class="sched-badge ${rec.hw === 'good' ? 'vacation' : rec.hw === 'warn' ? 'etc' : 'exam'}">${statusLabel(rec.hw, 'hw')}</span>
+    </div>`;
+  }).join('');
+}
+
+window.toggleClassStudent = async function(classId, studentId){
+  if(classOf[studentId] === classId){
+    delete classOf[studentId];
+  } else {
+    classOf[studentId] = classId;
+  }
+  await saveClassOf();
+  renderClassDetail(classId);
+  renderClassList();
+  renderHomeClassFrame();
+};
+
+window.addClassComment = async function(classId){
+  const input = document.getElementById('classCommentInput');
+  const text = input.value.trim();
+  if(!text) return;
+  classComments.push({ id: 'cm' + Date.now(), classId, text, date: todayKey });
+  await saveClassComments();
+  input.value = '';
+  renderClassDetail(classId);
+};
+
+window.deleteClassComment = async function(id){
+  const cm = classComments.find(c => c.id === id);
+  classComments = classComments.filter(c => c.id !== id);
+  await saveClassComments();
+  if(cm) renderClassDetail(cm.classId);
+};
+
+function classCommentsForStudentHtml(studentId){
+  const classId = classOf[studentId];
+  if(!classId) return '';
+  const cls = classes.find(c => c.id === classId);
+  if(!cls) return '';
+  const comments = classComments.filter(cm => cm.classId === classId).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 5);
+  if(comments.length === 0) return '';
+  return `
+    <div class="hw-card">
+      <label>💬 ${cls.name} 코멘트</label>
+      <div style="margin-top:8px;">
+        ${comments.map(cm => `
+          <div class="class-comment-item">
+            <div class="class-comment-text">${cm.text}</div>
+            <div class="class-comment-meta"><span>${cm.date}</span></div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+(function(){
+  const idEl = document.getElementById('loginId');
+  const pwEl = document.getElementById('loginPw');
+  if(idEl) idEl.addEventListener('keydown', e => { if(e.key === 'Enter') handleTeacherLogin(); });
+  if(pwEl) pwEl.addEventListener('keydown', e => { if(e.key === 'Enter') handleTeacherLogin(); });
+})();
+
+loadAll();
+
+function setMode(mode){
+  const homeView = document.getElementById('homeView');
+  const teacherView = document.getElementById('teacherView');
+  const parentView = document.getElementById('parentView');
+  const studentView = document.getElementById('studentView');
+  const settingsView = document.getElementById('settingsView');
+  const scheduleView = document.getElementById('scheduleView');
+  const reportView = document.getElementById('reportView');
+  const plannerView = document.getElementById('plannerView');
+  const qnaView = document.getElementById('qnaView');
+  const classView = document.getElementById('classView');
+  const title = document.getElementById('pageTitle');
+
+  homeView.style.display = 'none';
+  teacherView.style.display = 'none';
+  parentView.style.display = 'none';
+  studentView.style.display = 'none';
+  settingsView.style.display = 'none';
+  scheduleView.style.display = 'none';
+  reportView.style.display = 'none';
+  plannerView.style.display = 'none';
+  qnaView.style.display = 'none';
+  classView.style.display = 'none';
+
+  document.querySelectorAll('#sideNav .side-item[data-mode]').forEach(el => {
+    el.classList.toggle('active', el.dataset.mode === mode || (mode === 'home' && el.dataset.mode === 'home'));
+  });
+
+  if(mode === 'teacher'){
+    teacherView.style.display = '';
+    title.textContent = '출결부 · 숙제 체크';
+  } else if(mode === 'parent'){
+    parentView.style.display = '';
+    title.textContent = '우리 아이 학습 현황';
+    populateParentSelect();
+    renderParentView();
+  } else if(mode === 'student'){
+    studentView.style.display = '';
+    title.textContent = '학생 전용 · 공부 앱';
+    populateStudentViewSelect();
+    renderStudentViewSelect();
+  } else if(mode === 'settings'){
+    settingsView.style.display = '';
+    title.textContent = '설정 · 공지';
+  } else if(mode === 'schedule'){
+    scheduleView.style.display = '';
+    title.textContent = '일정 달력';
+    populateSchedStudentSelect();
+    renderScheduleList();
+  } else if(mode === 'report'){
+    reportView.style.display = '';
+    title.textContent = '학생 리포트';
+    populateReportStudentSelect();
+    renderReportForSelected();
+  } else if(mode === 'planner'){
+    plannerView.style.display = '';
+    title.textContent = '학생 플래너';
+    populatePlannerStudentSelect();
+    window.renderPlannerForSelected();
+  } else if(mode === 'qna'){
+    qnaView.style.display = '';
+    title.textContent = '질문 Q&A';
+    window.renderQnaTeacherList();
+  } else if(mode === 'class'){
+    classView.style.display = '';
+    title.textContent = '반 관리';
+    populateClassSelect();
+    renderClassList();
+    renderClassDetail(document.getElementById('classSelect') ? document.getElementById('classSelect').value : '');
+  } else {
+    homeView.style.display = '';
+    title.textContent = 'Inner Leader · 학습관리';
+    updateHomeStats();
+  }
+}
+window.setMode = setMode;
+window.goHome = () => setMode('home');
+window.openPlannerFor = function(studentId){
+  setMode('planner');
+  const sel = document.getElementById('plannerStudentSelect');
+  if(sel){ sel.value = studentId; }
+  renderPlannerForStudent(studentId);
+};
+
+window.goParentEntry = function(){
+  if(students.length === 0){
+    setMode('parent');
+    return;
+  }
+  setMode('parent');
+};
+
+window.handleTeacherLogin = async function(){
+  const idEl = document.getElementById('loginId');
+  const pwEl = document.getElementById('loginPw');
+  const errEl = document.getElementById('loginError');
+  const id = idEl.value.trim();
+  const pw = pwEl.value;
+  errEl.textContent = '';
+
+  if(!id || !pw){
+    errEl.textContent = '아이디와 비밀번호를 모두 입력해주세요.';
+    return;
+  }
+
+  if(!teacherAuth){
+    if(pw.length < 4){
+      errEl.textContent = '비밀번호는 4자 이상으로 설정해주세요.';
+      return;
+    }
+    teacherAuth = { id, pw };
+    try{
+      await window.storage.set('teacherAuth', JSON.stringify(teacherAuth), true);
+    }catch(e){ console.error('teacherAuth 저장 오류:', e); }
+    idEl.value = ''; pwEl.value = '';
+    enterApp();
+    return;
+  }
+
+  if(id === teacherAuth.id && pw === teacherAuth.pw){
+    idEl.value = ''; pwEl.value = '';
+    enterApp();
+  } else {
+    errEl.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.';
+    pwEl.value = '';
+  }
+};
+
+function enterApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'flex';
+  setMode('home');
+}
+
+window.handleTeacherLogout = function(){
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  const errEl = document.getElementById('loginError');
+  if(errEl) errEl.textContent = '';
+  const idEl = document.getElementById('loginId');
+  if(idEl) setTimeout(() => idEl.focus(), 30);
+};
+
+function populateParentSelect(){
+  const sel = document.getElementById('parentStudentSelect');
+  const prev = sel.value;
+  sel.innerHTML = students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  if(prev && students.some(s => s.id === prev)) sel.value = prev;
+}
+
+function statusLabel(v, type){
+  if(type === 'att'){
+    return v === 'good' ? '출석' : v === 'warn' ? '지각' : v === 'absent' ? '결석' : '미체크';
+  }
+  return v === 'good' ? '제출 완료' : v === 'warn' ? '부분 제출' : v === 'absent' ? '미제출' : '미체크';
+}
+function statusClass(v){
+  return v === 'good' ? 'good' : v === 'warn' ? 'warn' : v === 'absent' ? 'absent' : 'none';
+}
+
+window.renderParentView = function(){
+  const sel = document.getElementById('parentStudentSelect');
+  if(students.length === 0){
+    document.getElementById('parentSummary').innerHTML = '<div class="empty">등록된 학생이 없습니다.</div>';
+    return;
+  }
+  const studentId = sel ? (sel.value || students[0].id) : students[0].id;
+  renderParentViewForId(studentId);
+};
+
+function renderParentViewForId(studentId){
+  const summary = document.getElementById('parentSummary');
+  const student = students.find(s => s.id === studentId);
+  if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
+
+  const todayRec = records[studentId + ':' + todayKey] || {};
+  const dates = last14Dates();
+  let presentCount = 0, hwGoodCount = 0, checkedDays = 0;
+  dates.forEach(d => {
+    const r = records[studentId + ':' + d];
+    if(r && r.att){
+      checkedDays++;
+      if(r.att === 'good') presentCount++;
+    }
+    if(r && r.hw === 'good') hwGoodCount++;
+  });
+  const attRate = checkedDays ? Math.round(presentCount / checkedDays * 100) : 0;
+
+  const dots = dates.map(d => {
+    const r = records[studentId + ':' + d];
+    const cls = r && r.att ? r.att : '';
+    return `<span class="dot ${cls}" title="${d}"></span>`;
+  }).join('');
+
+  summary.innerHTML = `
+    <div class="today-status">
+      <div class="status-card">
+        <div class="label">오늘 출석</div>
+        <span class="badge ${statusClass(todayRec.att)}">${statusLabel(todayRec.att,'att')}</span>
+      </div>
+      <div class="status-card">
+        <div class="label">오늘 숙제</div>
+        <span class="badge ${statusClass(todayRec.hw)}">${statusLabel(todayRec.hw,'hw')}</span>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <h3 style="margin:0 0 4px;">🗓️ ${student.name} 플래너</h3>
+      ${parentPlannerHtml(studentId)}
+    </div>
+
+    <div class="settings-card">
+      ${parentReportHtml(studentId)}
+    </div>
+
+    <div class="hw-card">
+      <label>📅 다가오는 일정</label>
+      <div style="margin-top:8px;">${studentScheduleHtml(studentId)}</div>
+    </div>
+
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="stat-label">최근 14일 출석률</div>
+        <div class="stat-value ${attRate >= 80 ? 'good' : 'warn'}">${attRate}%</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">최근 14일 숙제 완료</div>
+        <div class="stat-value ${hwGoodCount >= 10 ? 'good' : 'warn'}">${hwGoodCount}일</div>
+      </div>
+    </div>
+
+    <div class="hw-card">
+      <label>오늘의 숙제 내용</label>
+      <div class="hw-text-display">${homeworkByDate[todayKey] ? homeworkByDate[todayKey] : '아직 등록되지 않았습니다.'}</div>
+      ${hwChecklistParentHtml(studentId)}
+    </div>
+
+    ${classCommentsForStudentHtml(studentId)}
+
+    <div class="hw-card">
+      <label>최근 14일 출석 기록</label>
+      <div class="history" style="margin-top:8px;">${dots}</div>
+    </div>
+  `;
+};
+
+// ---- Student View (direct access) ----
+function populateStudentViewSelect(){
+  const sel = document.getElementById('studentViewSelect');
+  if(!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = students.map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+  if(prev && students.some(s => s.id === prev)) sel.value = prev;
+}
+
+window.renderStudentViewSelect = function(){
+  const sel = document.getElementById('studentViewSelect');
+  const summary = document.getElementById('studentSummary');
+  if(students.length === 0){
+    if(summary) summary.innerHTML = '<div class="empty">등록된 학생이 없습니다.</div>';
+    return;
+  }
+  const studentId = sel ? (sel.value || students[0].id) : students[0].id;
+  renderStudentViewForId(studentId);
+};
+
+// ---- Student View ----
+let timerInterval = null;
+let timerSeconds = 0;
+let timerRunning = false;
+let timerSessions = [];
+let currentTimerStudentId = null;
+
+function renderStudentViewForId(studentId){
+  currentTimerStudentId = studentId;
+  const summary = document.getElementById('studentSummary') || document.getElementById('parentSummary');
+  const student = students.find(s => s.id === studentId);
+  if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
+
+  const todayRec = records[studentId + ':' + todayKey] || {};
+  const hwText = homeworkByDate[todayKey] || '아직 등록되지 않았습니다.';
+  const hwState = todayRec.hw || null;
+  const hasChecklist = todaysHomeworkItems().length > 0;
+
+  const hwBtns = [
+    { v:'good', label:'✅ 완료했어요' },
+    { v:'warn', label:'🔶 일부만 했어요' },
+    { v:'absent', label:'❌ 못 했어요' },
+  ].map(b => `<button class="hw-self-btn ${hwState === b.v ? 'active '+b.v : ''}" onclick="studentSetHw('${studentId}','${b.v}')">${b.label}</button>`).join('');
+
+  summary.innerHTML = `
+    <div class="student-hw-card">
+      <div class="hw-label">📋 오늘의 숙제</div>
+      <div class="hw-content">${hwText}</div>
+      ${hasChecklist ? '' : `
+        <div class="hw-label" style="margin-top:14px;">내 숙제 상태</div>
+        <div class="hw-self-btns">${hwBtns}</div>
+      `}
+    </div>
+
+    ${hwChecklistStudentHtml(studentId)}
+
+    <div class="hw-card">
+      <label>📅 다가오는 일정</label>
+      <div style="margin-top:8px;">${studentScheduleHtml(studentId)}</div>
+    </div>
+
+    ${classCommentsForStudentHtml(studentId)}
+
+    <div class="timer-card">
+      <div class="hw-label">⏱ 공부 타이머</div>
+      <div class="timer-display" id="timerDisplay">00:00:00</div>
+      <div class="timer-btns">
+        <button class="timer-btn start" id="timerStartBtn" onclick="timerToggle()">시작</button>
+        <button class="timer-btn reset" onclick="timerReset()">초기화</button>
+      </div>
+      <div class="timer-log" id="timerLog"></div>
+      <div class="session-list" id="sessionList"></div>
+    </div>
+
+    <div class="hw-card">
+      <label>💬 질문 Q&A</label>
+      <div class="qna-ask-row" style="margin-top:8px;">
+        <textarea id="studentQuestionInput" placeholder="선생님께 궁금한 점을 남겨보세요."></textarea>
+        <button class="qna-answer-btn" onclick="submitStudentQuestion('${studentId}')">등록</button>
+      </div>
+      <div id="studentQnaList" style="margin-top:12px;">${studentQnaListHtml(studentId)}</div>
+    </div>
+  `;
+  renderTimerDisplay();
+  renderSessions();
+}
+
+window.studentSetHw = async function(studentId, val){
+  const key = studentId + ':' + todayKey;
+  if(!records[key]) records[key] = {};
+  records[key].hw = records[key].hw === val ? null : val;
+  await saveRecords();
+  renderStudentViewForId(studentId);
+};
+
+function pad(n){ return String(n).padStart(2,'0'); }
+function formatSeconds(s){ return `${pad(Math.floor(s/3600))}:${pad(Math.floor((s%3600)/60))}:${pad(s%60)}`; }
+
+function renderTimerDisplay(){
+  const el = document.getElementById('timerDisplay');
+  if(!el) return;
+  el.textContent = formatSeconds(timerSeconds);
+  el.className = 'timer-display' + (timerRunning ? ' running' : '');
+  const btn = document.getElementById('timerStartBtn');
+  if(btn) btn.textContent = timerRunning ? '일시정지' : (timerSeconds > 0 ? '계속' : '시작');
+}
+
+function renderSessions(){
+  const el = document.getElementById('sessionList');
+  if(!el || timerSessions.length === 0) return;
+  const total = timerSessions.reduce((a,b)=>a+b.secs,0);
+  el.innerHTML = timerSessions.map((s,i)=>`
+    <div class="session-item"><span>세션 ${i+1}</span><span>${formatSeconds(s.secs)}</span></div>
+  `).join('') + `<div class="total-time">오늘 총 공부시간: ${formatSeconds(total)}</div>`;
+}
+
+window.timerToggle = function(){
+  if(timerRunning){
+    clearInterval(timerInterval);
+    timerRunning = false;
+    if(timerSeconds > 0){
+      timerSessions.push({ secs: timerSeconds });
+      addStudyTime(currentTimerStudentId, timerSeconds);
+    }
+    timerSeconds = 0;
+  } else {
+    timerRunning = true;
+    timerSeconds = 0;
+    timerInterval = setInterval(()=>{
+      timerSeconds++;
+      renderTimerDisplay();
+    }, 1000);
+  }
+  renderTimerDisplay();
+  renderSessions();
+};
+
+window.timerReset = function(){
+  clearInterval(timerInterval);
+  timerRunning = false;
+  timerSeconds = 0;
+  timerSessions = [];
+  renderTimerDisplay();
+  renderSessions();
+};
+
+window.copyStudentLink = function(studentId, studentName){
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('student', studentId);
+  url.searchParams.set('role', 'student');
+  const link = url.toString();
+  const showToast = (msg) => {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(
+      () => showToast(studentName + ' 학생 링크가 복사되었습니다'),
+      () => showToast(link)
+    );
+  } else {
+    showToast(link);
+  }
+};
+
+window.copyParentLink = function(studentId, studentName){
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('student', studentId);
+  const link = url.toString();
+
+  const showToast = (msg) => {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  };
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(link).then(
+      () => showToast(studentName + ' 학부모 링크가 복사되었습니다'),
+      () => showToast(link)
+    );
+  } else {
+    showToast(link);
+  }
+};
+</script>
+</body>
+</html>
