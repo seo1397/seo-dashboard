@@ -893,13 +893,20 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  // 학생/학부모 공유 링크(?student=...)로 접속하면 원장 로그인 화면이
-  // 잠깐이라도 보이지 않도록, 무거운 스크립트가 로드되기 전에 먼저 화면을 결정합니다.
+  // 학생/학부모 공유 링크(?student=...)로 접속하면 원장 로그인 화면이나
+  // 관리자용 사이드바·홈 화면이 잠깐이라도 보이지 않도록, 무거운 스크립트가
+  // 로드되기 전에 먼저 화면을 결정합니다.
   (function(){
     var params = new URLSearchParams(window.location.search);
     var locked = params.get('student');
     document.getElementById('loginScreen').style.display = locked ? 'none' : 'flex';
     document.getElementById('appShell').style.display = locked ? 'flex' : 'none';
+    if(locked){
+      var sidebarEl = document.getElementById('sidebarNav');
+      if(sidebarEl) sidebarEl.style.display = 'none';
+      var homeEl = document.getElementById('homeView');
+      if(homeEl) homeEl.style.display = 'none';
+    }
   })();
 </script>
 
