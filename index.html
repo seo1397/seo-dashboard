@@ -513,7 +513,7 @@
   </div>
 </div>
 <div class="app-shell" id="appShell" style="display:none;">
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebarNav">
     <div class="side-brand">
       <div class="side-logo">IL</div>
       <div>
@@ -924,9 +924,9 @@ try{
   if(window.firebase && firebase.initializeApp){
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
-    console.log('Firestore 연결 완료');
+    console.log('%c[저장소] Firestore 사용 중 (기기 간 데이터 공유 O)', 'color:green; font-weight:bold;');
   } else {
-    console.warn('Firebase SDK를 불러오지 못해 localStorage로 대체합니다.');
+    console.warn('%c[저장소] Firebase SDK 로드 실패 → localStorage 사용 중 (이 브라우저에만 저장됨, 기기 간 공유 X)', 'color:orange; font-weight:bold;');
   }
 }catch(e){
   console.error('Firebase 초기화 오류, localStorage로 대체합니다:', e);
@@ -1171,6 +1171,9 @@ function renderNoticeBanner(){
 }
 
 function applyLockedView(){
+  const sidebarEl = document.getElementById('sidebarNav');
+  if(sidebarEl) sidebarEl.style.display = 'none';
+
   const student = students.find(s => s.id === lockedStudentId);
   document.getElementById('homeView').style.display = 'none';
   document.getElementById('teacherView').style.display = 'none';
