@@ -2801,13 +2801,22 @@ window.handleTeacherLogin = async function(){
     idEl.value = ''; pwEl.value = '';
     await enterApp();
   }catch(err){
-    if(err && err.code === 'auth/user-not-found'){
+    // 최신 Firebase SDK는 "계정 없음"과 "비밀번호 틀림"을 구분하지 않고
+    // 둘 다 auth/invalid-credential로 반환하므로, 두 경우 모두 일단
+    // 계정 생성을 시도해봅니다. 이미 존재하는 계정이면 아래에서
+    // auth/email-already-in-use로 걸러져 "비밀번호가 틀렸다"고 정확히 안내됩니다.
+    if(err && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential')){
       try{
         await auth.createUserWithEmailAndPassword(email, pw);
         idEl.value = ''; pwEl.value = '';
         await enterApp();
       }catch(err2){
-        errEl.textContent = firebaseAuthErrorToMessage(err2);
+        if(err2 && err2.code === 'auth/email-already-in-use'){
+          errEl.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.';
+          pwEl.value = '';
+        } else {
+          errEl.textContent = firebaseAuthErrorToMessage(err2);
+        }
       }
     } else {
       errEl.textContent = firebaseAuthErrorToMessage(err);
