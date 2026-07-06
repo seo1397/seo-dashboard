@@ -912,12 +912,14 @@
 
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script>
 // ---- Firebase(Firestore) 연동 ----
 // Firestore에 저장하되, SDK 로드 실패/네트워크 오류 시에는 localStorage로 자동 대체합니다.
 const LS_PREFIX = 'innerleader_storage__';
 const FIRESTORE_COLLECTION = 'innerleader_data';
 let db = null;
+let auth = null;
 
 try{
   const firebaseConfig = {
@@ -931,6 +933,7 @@ try{
   if(window.firebase && firebase.initializeApp){
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
+    auth = firebase.auth();
     console.log('%c[저장소] Firestore 사용 중 (기기 간 데이터 공유 O)', 'color:green; font-weight:bold;');
   } else {
     console.warn('%c[저장소] Firebase SDK 로드 실패 → localStorage 사용 중 (이 브라우저에만 저장됨, 기기 간 공유 X)', 'color:orange; font-weight:bold;');
@@ -938,6 +941,29 @@ try{
 }catch(e){
   console.error('Firebase 초기화 오류, localStorage로 대체합니다:', e);
   db = null;
+  auth = null;
+}
+
+// Firebase Authentication 로그인 방식을 여기서 정합니다.
+// - 원장님: 실제 이메일/비밀번호 로그인 (Firestore 규칙에서 "원장님인지" 구분하는 기준이 됩니다)
+// - 학생/학부모: 화면에는 안 보이지만 뒤에서 조용히 "익명 로그인"만 처리
+function teacherIdToEmail(id){
+  // Firebase Authentication은 이메일 형식이 필요해서, 아이디를 내부용 가짜 이메일로 바꿔줍니다.
+  const safe = String(id).toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  return (safe || 'director') + '@innerleader-app.local';
+}
+
+function firebaseAuthErrorToMessage(err){
+  if(!err || !err.code) return '처리 중 오류가 발생했습니다.';
+  if(err.code === 'auth/invalid-email') return '아이디에 사용할 수 없는 문자가 포함되어 있습니다.';
+  if(err.code === 'auth/weak-password') return '비밀번호는 6자 이상으로 설정해주세요.';
+  if(err.code === 'auth/wrong-password') return '아이디 또는 비밀번호가 일치하지 않습니다.';
+  if(err.code === 'auth/user-not-found') return '아이디 또는 비밀번호가 일치하지 않습니다.';
+  if(err.code === 'auth/email-already-in-use') return '이미 사용 중인 아이디입니다.';
+  if(err.code === 'auth/too-many-requests') return '너무 여러 번 시도했습니다. 잠시 후 다시 시도해주세요.';
+  if(err.code === 'auth/requires-recent-login') return '보안을 위해 로그아웃 후 다시 로그인하고 시도해주세요.';
+  if(err.code === 'auth/network-request-failed') return '네트워크 연결을 확인해주세요.';
+  return '처리 중 오류가 발생했습니다. (' + err.code + ')';
 }
 
 function lsGet(key){
@@ -971,6 +997,99 @@ function lsList(prefix){
     }
     return { keys, prefix, shared: false };
   }catch(e){ return null; }
+}
+
+// ---- 학생별 공개 데이터 (student_public 컬렉션) ----
+// 원장님 전용 데이터(innerleader_data)와 분리된, "그 학생 한 명"의 데이터만 담는 문서입니다.
+// 학생/학부모 링크는 이 컬렉션의 자기 학생 문서 하나만 읽어오며, 원장님 전용 데이터는 아예 요청하지 않습니다.
+const PUBLIC_COLLECTION = 'student_public';
+const LS_PUBLIC_PREFIX = 'innerleader_public__';
+
+async function publicDocGet(studentId){
+  if(db){
+    try{
+      const doc = await db.collection(PUBLIC_COLLECTION).doc(studentId).get();
+      return doc.exists ? doc.data() : null;
+    }catch(e){ console.error('학생 공개 데이터 읽기 오류:', e); }
+  }
+  try{
+    const raw = localStorage.getItem(LS_PUBLIC_PREFIX + studentId);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+
+async function publicDocSet(studentId, data){
+  if(db){
+    try{
+      await db.collection(PUBLIC_COLLECTION).doc(studentId).set(data);
+      return true;
+    }catch(e){ console.error('학생 공개 데이터 저장 오류:', e); }
+  }
+  try{
+    localStorage.setItem(LS_PUBLIC_PREFIX + studentId, JSON.stringify(data));
+    return true;
+  }catch(e){ return false; }
+}
+
+async function publicDocDelete(studentId){
+  if(db){
+    try{ await db.collection(PUBLIC_COLLECTION).doc(studentId).delete(); return true; }
+    catch(e){ console.error('학생 공개 데이터 삭제 오류:', e); }
+  }
+  try{ localStorage.removeItem(LS_PUBLIC_PREFIX + studentId); return true; }catch(e){ return false; }
+}
+
+// 현재 메모리에 있는 데이터에서 특정 학생 한 명의 몫만 뽑아 "공개용 스냅샷"을 만듭니다.
+// (원장님 모드에서는 students 배열 전체를 순회해 모든 학생 몫을 만들고,
+//  학생/학부모 잠긴 모드에서는 students 배열에 이미 자기 자신 한 명만 들어있으므로
+//  결과적으로 자기 자신의 스냅샷만 다시 만들어 올리는 셈이 됩니다.)
+function buildStudentSnapshot(studentId){
+  const student = students.find(s => s.id === studentId);
+  if(!student) return null;
+
+  const rec = {};
+  Object.keys(records).forEach(k => { if(k.indexOf(studentId + ':') === 0) rec[k] = records[k]; });
+
+  const hwc = {};
+  Object.keys(homeworkItemChecks).forEach(k => { if(k.indexOf(studentId + ':') === 0) hwc[k] = homeworkItemChecks[k]; });
+
+  const stime = {};
+  Object.keys(studyTimeByDate).forEach(k => { if(k.indexOf(studentId + ':') === 0) stime[k] = studyTimeByDate[k]; });
+
+  const cid = classOf[studentId] || null;
+  const cls = (classes || []).find(c => c.id === cid);
+
+  return {
+    id: student.id,
+    name: student.name,
+    pin: student.pin || null,
+    classId: cid,
+    className: cls ? cls.name : null,
+    records: rec,
+    homeworkByDate: homeworkByDate || {},
+    homeworkItemChecks: hwc,
+    homeworkItems: homeworkItems || [],
+    notice: notice || '',
+    schedule: (schedule || []).filter(e => e.studentId === 'all' || e.studentId === studentId),
+    studyTimeByDate: stime,
+    progress: progressByStudent[studentId] || '',
+    testScores: (testScores || []).filter(t => t.studentId === studentId),
+    planEntries: (planEntries || []).filter(p => p.studentId === studentId),
+    dday: studentDDay[studentId] || defaultDDay || null,
+    parentVisible: !!parentVisible[studentId],
+    questions: (questions || []).filter(q => q.studentId === studentId),
+    classComments: cid ? (classComments || []).filter(c => c.classId === cid) : [],
+    updatedAt: Date.now()
+  };
+}
+
+async function syncStudentPublic(studentId){
+  const snap = buildStudentSnapshot(studentId);
+  if(snap) await publicDocSet(studentId, snap);
+}
+
+async function syncAllStudentsPublic(){
+  for(const s of students){ await syncStudentPublic(s.id); }
 }
 
 if(!window.storage){
@@ -1049,7 +1168,62 @@ let classes = []; // [{id, name}]
 let classOf = {}; // { studentId: classId }
 let classComments = []; // [{id, classId, text, date}]
 
+async function loadLockedStudentData(){
+  // 학생/학부모 공유 링크로 접속했을 때만 실행됩니다.
+  // 원장님 전용 데이터(innerleader_data)는 절대 요청하지 않고,
+  // 이 학생 한 명의 공개 스냅샷(student_public/{id})만 가져옵니다.
+  const snap = await publicDocGet(lockedStudentId);
+  if(!snap){
+    students = [];
+  } else {
+    students = [{ id: snap.id, name: snap.name, pin: snap.pin || undefined }];
+    records = snap.records || {};
+    homeworkByDate = snap.homeworkByDate || {};
+    notice = snap.notice || '';
+    schedule = snap.schedule || [];
+    studyTimeByDate = snap.studyTimeByDate || {};
+    progressByStudent = snap.progress ? { [snap.id]: snap.progress } : {};
+    testScores = snap.testScores || [];
+    planEntries = snap.planEntries || [];
+    studentDDay = snap.dday ? { [snap.id]: snap.dday } : {};
+    defaultDDay = null;
+    parentVisible = { [snap.id]: !!snap.parentVisible };
+    questions = snap.questions || [];
+    homeworkItems = snap.homeworkItems || [];
+    homeworkItemChecks = snap.homeworkItemChecks || {};
+    classes = snap.className ? [{ id: snap.classId, name: snap.className }] : [];
+    classOf = snap.classId ? { [snap.id]: snap.classId } : {};
+    classComments = snap.classComments || [];
+  }
+  teacherAuth = null; // 학생/학부모 세션에서는 절대 채우지 않습니다.
+
+  renderNoticeBanner();
+  render();
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'flex';
+  applyLockedView();
+}
+
 async function loadAll(){
+  if(lockedStudentId){
+    if(auth){
+      try{ await auth.signInAnonymously(); }
+      catch(e){ console.error('학생/학부모 익명 로그인 오류:', e); }
+    }
+    await loadLockedStudentData();
+    return;
+  }
+
+  // 원장님 데이터는 로그인 전에는 아예 요청하지 않습니다 (로그인 화면만 먼저 보여줍니다).
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('appShell').style.display = 'none';
+  const idEl = document.getElementById('loginId');
+  if(idEl) setTimeout(() => idEl.focus(), 30);
+  const hint = document.getElementById('loginHint');
+  if(hint) hint.textContent = '아이디·비밀번호를 처음 입력하시면 자동으로 계정이 생성됩니다.';
+}
+
+async function loadTeacherData(){
   try{
     const s = await window.storage.get('students', true);
     students = s ? JSON.parse(s.value) : [];
@@ -1062,10 +1236,6 @@ async function loadAll(){
     const h = await window.storage.get('homework', true);
     homeworkByDate = h ? JSON.parse(h.value) : {};
   }catch(e){ homeworkByDate = {}; }
-  try{
-    const ta = await window.storage.get('teacherAuth', true);
-    teacherAuth = ta ? JSON.parse(ta.value) : null;
-  }catch(e){ teacherAuth = null; }
   try{
     const n = await window.storage.get('notice', true);
     notice = n ? n.value : '';
@@ -1127,6 +1297,35 @@ async function loadAll(){
     const cc = await window.storage.get('classComments', true);
     classComments = cc ? JSON.parse(cc.value) : [];
   }catch(e){ classComments = []; }
+
+  // 학생이 스스로 남긴 기록(숙제 체크, 공부 타이머, 질문)은
+  // student_public 문서에서 가져와 원장님 화면에 반영합니다.
+  // (학생/학부모는 innerleader_data에 쓸 수 없도록 막혀 있으므로,
+  //  자기 스스로 남긴 기록은 student_public에만 저장되어 있습니다.)
+  for(const s of students){
+    let pub = null;
+    try{ pub = await publicDocGet(s.id); }catch(e){ pub = null; }
+    if(!pub) continue;
+    if(pub.records){
+      Object.keys(pub.records).forEach(key => {
+        if(!records[key]) records[key] = {};
+        if(pub.records[key] && pub.records[key].hw !== undefined){
+          records[key].hw = pub.records[key].hw;
+        }
+      });
+    }
+    if(pub.homeworkItemChecks) Object.assign(homeworkItemChecks, pub.homeworkItemChecks);
+    if(pub.studyTimeByDate) Object.assign(studyTimeByDate, pub.studyTimeByDate);
+    if(pub.questions){
+      pub.questions.forEach(pq => {
+        const idx = questions.findIndex(x => x.id === pq.id);
+        if(idx === -1) questions.push(pq);
+        else questions[idx] = pq; // 학생이 새로 남긴 질문 반영(답변은 원장님 쪽이 최신)
+      });
+    }
+  }
+  updateQnaBadges();
+
   renderHwItemList();
   renderHomeClassFrame();
 
@@ -1137,32 +1336,15 @@ async function loadAll(){
     defaultDdayDateEl.value = defaultDDay.date || '';
   }
 
-  const hint = document.getElementById('loginHint');
-  if(hint){
-    hint.textContent = teacherAuth ? '' : '처음 사용이신가요? 아이디·비밀번호를 입력하면 계정이 생성됩니다.';
-  }
-
   document.getElementById('hwInput').value = homeworkByDate[todayKey] || '';
   const noticeInputEl = document.getElementById('noticeInput');
   if(noticeInputEl) noticeInputEl.value = notice;
-  if(teacherAuth){
-    const settingsIdEl = document.getElementById('settingsId');
-    if(settingsIdEl) settingsIdEl.value = teacherAuth.id || '';
+  const settingsIdEl = document.getElementById('settingsId');
+  if(settingsIdEl && auth && auth.currentUser && auth.currentUser.email){
+    settingsIdEl.value = auth.currentUser.email.split('@')[0];
   }
   renderNoticeBanner();
   render();
-
-  if(lockedStudentId){
-    // 학부모/학생 공유 링크로 접속한 경우 원장 로그인 없이 바로 앱을 보여줍니다.
-    document.getElementById('loginScreen').style.display = 'none';
-    document.getElementById('appShell').style.display = 'flex';
-    applyLockedView();
-  } else {
-    document.getElementById('loginScreen').style.display = 'flex';
-    document.getElementById('appShell').style.display = 'none';
-    const idEl = document.getElementById('loginId');
-    if(idEl) setTimeout(() => idEl.focus(), 30);
-  }
 }
 
 function renderNoticeBanner(){
@@ -1258,18 +1440,21 @@ async function saveStudents(){
     const r = await window.storage.set('students', JSON.stringify(students), true);
     if(!r) console.error('students 저장 실패: storage.set returned null');
   }catch(e){ console.error('students 저장 오류:', e); }
+  await syncAllStudentsPublic();
 }
-async function saveRecords(){
+async function saveRecords(studentId){
   try{
     const r = await window.storage.set('records', JSON.stringify(records), true);
     if(!r) console.error('records 저장 실패: storage.set returned null');
   }catch(e){ console.error('records 저장 오류:', e); }
+  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
 async function saveHomework(){
   try{
     const r = await window.storage.set('homework', JSON.stringify(homeworkByDate), true);
     if(!r) console.error('homework 저장 실패: storage.set returned null');
   }catch(e){ console.error('homework 저장 오류:', e); }
+  await syncAllStudentsPublic();
 }
 
 function last14Dates(){
@@ -1359,7 +1544,7 @@ window.setRecord = async function(studentId, field, value){
   const key = studentId + ':' + todayKey;
   if(!records[key]) records[key] = {};
   records[key][field] = records[key][field] === value ? null : value;
-  await saveRecords();
+  await saveRecords(studentId);
   render();
 };
 
@@ -1401,6 +1586,7 @@ window.removeStudent = async function(id){
   pendingDeleteId = null;
   students = students.filter(s => s.id !== id);
   await saveStudents();
+  await publicDocDelete(id);
   render();
 };
 
@@ -1413,13 +1599,18 @@ document.getElementById('toggleAddBtn').addEventListener('click', () => {
 document.getElementById('addStudentBtn').addEventListener('click', addStudent);
 document.getElementById('newName').addEventListener('keydown', e => { if(e.key === 'Enter') addStudent(); });
 
+function randomIdSuffix(){
+  // 링크에 들어가는 학생 ID를 추측하기 어렵게 무작위 문자열을 덧붙입니다.
+  return Math.random().toString(36).slice(2, 10);
+}
+
 async function addStudent(){
   const input = document.getElementById('newName');
   const pinInput = document.getElementById('newPin');
   const name = input.value.trim();
   const pin = pinInput.value.trim();
   if(!name) return;
-  const student = { id: 's' + Date.now(), name };
+  const student = { id: 's' + Date.now() + '_' + randomIdSuffix(), name };
   if(pin && /^\d{4}$/.test(pin)) student.pin = pin;
   students.push(student);
   await saveStudents();
@@ -1446,6 +1637,7 @@ async function saveNotice(){
     const r = await window.storage.set('notice', notice, true);
     if(!r) console.error('notice 저장 실패: storage.set returned null');
   }catch(e){ console.error('notice 저장 오류:', e); }
+  await syncAllStudentsPublic();
 }
 
 let noticeTimer;
@@ -1479,13 +1671,8 @@ window.saveAccountSettings = async function(){
     msg.style.color = 'var(--absent)';
     return;
   }
-  if(!pw && !teacherAuth){
-    msg.textContent = '비밀번호를 입력해주세요.';
-    msg.style.color = 'var(--absent)';
-    return;
-  }
-  if(pw && pw.length < 4){
-    msg.textContent = '비밀번호는 4자 이상으로 설정해주세요.';
+  if(pw && pw.length < 6){
+    msg.textContent = '비밀번호는 6자 이상으로 설정해주세요.';
     msg.style.color = 'var(--absent)';
     return;
   }
@@ -1494,19 +1681,29 @@ window.saveAccountSettings = async function(){
     msg.style.color = 'var(--absent)';
     return;
   }
+  if(!auth || !auth.currentUser){
+    msg.textContent = '로그인 상태를 확인할 수 없습니다. 다시 로그인해주세요.';
+    msg.style.color = 'var(--absent)';
+    return;
+  }
 
-  teacherAuth = { id, pw: pw ? pw : (teacherAuth ? teacherAuth.pw : '') };
   try{
-    await window.storage.set('teacherAuth', JSON.stringify(teacherAuth), true);
+    const newEmail = teacherIdToEmail(id);
+    if(newEmail !== auth.currentUser.email){
+      await auth.currentUser.updateEmail(newEmail);
+    }
+    if(pw){
+      await auth.currentUser.updatePassword(pw);
+    }
     msg.style.color = 'var(--good)';
     msg.textContent = '저장됨 ✓';
     pwEl.value = '';
     pwConfirmEl.value = '';
     setTimeout(() => msg.textContent = '', 1500);
   }catch(e){
-    console.error('teacherAuth 저장 오류:', e);
+    console.error('계정 정보 저장 오류:', e);
     msg.style.color = 'var(--absent)';
-    msg.textContent = '저장에 실패했습니다.';
+    msg.textContent = firebaseAuthErrorToMessage(e);
   }
 };
 
@@ -1536,6 +1733,7 @@ async function saveSchedule(){
     const r = await window.storage.set('schedule', JSON.stringify(schedule), true);
     if(!r) console.error('schedule 저장 실패: storage.set returned null');
   }catch(e){ console.error('schedule 저장 오류:', e); }
+  await syncAllStudentsPublic();
 }
 
 window.addScheduleEvent = async function(){
@@ -1618,18 +1816,19 @@ function studentScheduleHtml(studentId){
 }
 
 // ---- Study time (순공시간) ----
-async function saveStudyTime(){
+async function saveStudyTime(studentId){
   try{
     const r = await window.storage.set('studyTime', JSON.stringify(studyTimeByDate), true);
     if(!r) console.error('studyTime 저장 실패: storage.set returned null');
   }catch(e){ console.error('studyTime 저장 오류:', e); }
+  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
 
 async function addStudyTime(studentId, secs){
   if(!studentId || !secs) return;
   const key = studentId + ':' + todayKey;
   studyTimeByDate[key] = (studyTimeByDate[key] || 0) + secs;
-  await saveStudyTime();
+  await saveStudyTime(studentId);
 }
 
 function studentStudyTimeSummary(studentId){
@@ -1644,19 +1843,21 @@ function studentStudyTimeSummary(studentId){
 }
 
 // ---- Progress notes (진도) ----
-async function saveProgress(){
+async function saveProgress(studentId){
   try{
     const r = await window.storage.set('progress', JSON.stringify(progressByStudent), true);
     if(!r) console.error('progress 저장 실패: storage.set returned null');
   }catch(e){ console.error('progress 저장 오류:', e); }
+  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
 
 // ---- Test scores (시험 점수) ----
-async function saveTestScores(){
+async function saveTestScores(studentId){
   try{
     const r = await window.storage.set('testScores', JSON.stringify(testScores), true);
     if(!r) console.error('testScores 저장 실패: storage.set returned null');
   }catch(e){ console.error('testScores 저장 오류:', e); }
+  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
 
 function populateReportStudentSelect(){
@@ -1703,7 +1904,7 @@ window.onProgressInput = function(e){
   const msg = document.getElementById('reportProgressMsg');
   if(msg) msg.textContent = '저장 중...';
   progressTimer = setTimeout(async () => {
-    await saveProgress();
+    await saveProgress(sel.value);
     if(msg){ msg.textContent = '저장됨 ✓'; setTimeout(() => msg.textContent = '', 1500); }
   }, 600);
 };
@@ -1727,7 +1928,7 @@ window.addTestScore = async function(){
   if(!scoreEl.value || isNaN(score)){ msg.style.color = 'var(--absent)'; msg.textContent = '점수를 입력해주세요.'; return; }
 
   testScores.push({ id: 't' + Date.now(), studentId, title, score, maxScore, date });
-  await saveTestScores();
+  await saveTestScores(studentId);
   titleEl.value = ''; scoreEl.value = ''; maxEl.value = ''; dateEl.value = '';
   msg.style.color = 'var(--good)'; msg.textContent = '추가됨 ✓';
   setTimeout(() => msg.textContent = '', 1500);
@@ -1735,8 +1936,9 @@ window.addTestScore = async function(){
 };
 
 window.deleteTestScore = async function(id){
+  const removed = testScores.find(t => t.id === id);
   testScores = testScores.filter(t => t.id !== id);
-  await saveTestScores();
+  await saveTestScores(removed ? removed.studentId : undefined);
   const sel = document.getElementById('reportStudentSelect');
   if(sel && sel.value) renderReportForStudent(sel.value);
 };
@@ -1795,6 +1997,7 @@ async function saveDefaultDday(){
   defaultDDay = (title && date) ? { title, date } : null;
   try{
     await window.storage.set('defaultDDay', JSON.stringify(defaultDDay), true);
+    await syncAllStudentsPublic();
     msg.style.color = 'var(--good)';
     msg.textContent = '저장됨 ✓';
     setTimeout(() => msg.textContent = '', 1500);
@@ -1806,23 +2009,26 @@ async function saveDefaultDday(){
 }
 window.saveDefaultDday = saveDefaultDday;
 
-async function savePlanEntries(){
+async function savePlanEntries(studentId){
   try{
     const r = await window.storage.set('planEntries', JSON.stringify(planEntries), true);
     if(!r) console.error('planEntries 저장 실패: storage.set returned null');
   }catch(e){ console.error('planEntries 저장 오류:', e); }
+  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
-async function saveStudentDDay(){
+async function saveStudentDDay(studentId){
   try{
     const r = await window.storage.set('studentDDay', JSON.stringify(studentDDay), true);
     if(!r) console.error('studentDDay 저장 실패: storage.set returned null');
   }catch(e){ console.error('studentDDay 저장 오류:', e); }
+  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
-async function saveParentVisible(){
+async function saveParentVisible(studentId){
   try{
     const r = await window.storage.set('parentVisible', JSON.stringify(parentVisible), true);
     if(!r) console.error('parentVisible 저장 실패: storage.set returned null');
   }catch(e){ console.error('parentVisible 저장 오류:', e); }
+  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
 
 function getWeekRange(){
@@ -1941,7 +2147,7 @@ function renderPlannerForStudent(studentId){
 
 window.toggleParentVisible = async function(studentId){
   parentVisible[studentId] = !parentVisible[studentId];
-  await saveParentVisible();
+  await saveParentVisible(studentId);
   renderPlannerForStudent(studentId);
 };
 
@@ -1966,7 +2172,7 @@ window.savePlannerDday = async function(studentId){
   } else {
     delete studentDDay[studentId];
   }
-  await saveStudentDDay();
+  await saveStudentDDay(studentId);
   renderPlannerForStudent(studentId);
 };
 
@@ -1977,7 +2183,7 @@ window.addPlanEntry = async function(studentId){
   const title = titleEl.value.trim();
   if(!title) return;
   planEntries.push({ id: 'p' + Date.now(), studentId, date, title, done: false });
-  await savePlanEntries();
+  await savePlanEntries(studentId);
   renderPlannerForStudent(studentId);
 };
 
@@ -1985,14 +2191,14 @@ window.togglePlanDone = async function(id){
   const entry = planEntries.find(p => p.id === id);
   if(!entry) return;
   entry.done = !entry.done;
-  await savePlanEntries();
+  await savePlanEntries(entry.studentId);
   renderPlannerForStudent(entry.studentId);
 };
 
 window.deletePlanEntry = async function(id){
   const entry = planEntries.find(p => p.id === id);
   planEntries = planEntries.filter(p => p.id !== id);
-  await savePlanEntries();
+  await savePlanEntries(entry ? entry.studentId : undefined);
   if(entry) renderPlannerForStudent(entry.studentId);
 };
 
@@ -2034,11 +2240,12 @@ function parentPlannerHtml(studentId){
 }
 
 // ---- Q&A ----
-async function saveQuestions(){
+async function saveQuestions(studentId){
   try{
     const r = await window.storage.set('questions', JSON.stringify(questions), true);
     if(!r) console.error('questions 저장 실패: storage.set returned null');
   }catch(e){ console.error('questions 저장 오류:', e); }
+  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
 
 function updateQnaBadges(){
@@ -2059,7 +2266,7 @@ window.submitStudentQuestion = async function(studentId){
   const text = input.value.trim();
   if(!text) return;
   questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null });
-  await saveQuestions();
+  await saveQuestions(studentId);
   updateQnaBadges();
   input.value = '';
   renderStudentViewForId(studentId);
@@ -2135,7 +2342,7 @@ window.answerQuestion = async function(id){
   if(!q) return;
   q.answer = answer;
   q.answeredAt = todayKey;
-  await saveQuestions();
+  await saveQuestions(q.studentId);
   updateQnaBadges();
   window.renderQnaTeacherList();
 };
@@ -2146,12 +2353,14 @@ async function saveHomeworkItems(){
     const r = await window.storage.set('homeworkItems', JSON.stringify(homeworkItems), true);
     if(!r) console.error('homeworkItems 저장 실패: storage.set returned null');
   }catch(e){ console.error('homeworkItems 저장 오류:', e); }
+  await syncAllStudentsPublic();
 }
-async function saveHomeworkItemChecks(){
+async function saveHomeworkItemChecks(studentId){
   try{
     const r = await window.storage.set('homeworkItemChecks', JSON.stringify(homeworkItemChecks), true);
     if(!r) console.error('homeworkItemChecks 저장 실패: storage.set returned null');
   }catch(e){ console.error('homeworkItemChecks 저장 오류:', e); }
+  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
 function todaysHomeworkItems(){
   return homeworkItems.filter(i => i.date === todayKey);
@@ -2203,9 +2412,9 @@ function recomputeHwStatus(studentId){
 window.toggleHwItemCheck = async function(studentId, itemId){
   const key = studentId + ':' + itemId;
   homeworkItemChecks[key] = !homeworkItemChecks[key];
-  await saveHomeworkItemChecks();
+  await saveHomeworkItemChecks(studentId);
   recomputeHwStatus(studentId);
-  await saveRecords();
+  await saveRecords(studentId);
   renderHwItemList();
   render();
   renderStudentViewForId(studentId);
@@ -2255,18 +2464,21 @@ async function saveClasses(){
     const r = await window.storage.set('classes', JSON.stringify(classes), true);
     if(!r) console.error('classes 저장 실패: storage.set returned null');
   }catch(e){ console.error('classes 저장 오류:', e); }
+  await syncAllStudentsPublic();
 }
 async function saveClassOf(){
   try{
     const r = await window.storage.set('classOf', JSON.stringify(classOf), true);
     if(!r) console.error('classOf 저장 실패: storage.set returned null');
   }catch(e){ console.error('classOf 저장 오류:', e); }
+  await syncAllStudentsPublic();
 }
 async function saveClassComments(){
   try{
     const r = await window.storage.set('classComments', JSON.stringify(classComments), true);
     if(!r) console.error('classComments 저장 실패: storage.set returned null');
   }catch(e){ console.error('classComments 저장 오류:', e); }
+  await syncAllStudentsPublic();
 }
 
 function studentsInClass(classId){
@@ -2574,37 +2786,45 @@ window.handleTeacherLogin = async function(){
     errEl.textContent = '아이디와 비밀번호를 모두 입력해주세요.';
     return;
   }
-
-  if(!teacherAuth){
-    if(pw.length < 4){
-      errEl.textContent = '비밀번호는 4자 이상으로 설정해주세요.';
-      return;
-    }
-    teacherAuth = { id, pw };
-    try{
-      await window.storage.set('teacherAuth', JSON.stringify(teacherAuth), true);
-    }catch(e){ console.error('teacherAuth 저장 오류:', e); }
-    idEl.value = ''; pwEl.value = '';
-    enterApp();
+  if(pw.length < 6){
+    errEl.textContent = '비밀번호는 6자 이상으로 설정해주세요.';
+    return;
+  }
+  if(!auth){
+    errEl.textContent = '로그인 기능을 사용할 수 없습니다. 인터넷 연결을 확인해주세요.';
     return;
   }
 
-  if(id === teacherAuth.id && pw === teacherAuth.pw){
+  const email = teacherIdToEmail(id);
+  try{
+    await auth.signInWithEmailAndPassword(email, pw);
     idEl.value = ''; pwEl.value = '';
-    enterApp();
-  } else {
-    errEl.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.';
-    pwEl.value = '';
+    await enterApp();
+  }catch(err){
+    if(err && err.code === 'auth/user-not-found'){
+      try{
+        await auth.createUserWithEmailAndPassword(email, pw);
+        idEl.value = ''; pwEl.value = '';
+        await enterApp();
+      }catch(err2){
+        errEl.textContent = firebaseAuthErrorToMessage(err2);
+      }
+    } else {
+      errEl.textContent = firebaseAuthErrorToMessage(err);
+      pwEl.value = '';
+    }
   }
 };
 
-function enterApp(){
+async function enterApp(){
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('appShell').style.display = 'flex';
+  await loadTeacherData();
   setMode('home');
 }
 
 window.handleTeacherLogout = function(){
+  if(auth) auth.signOut().catch(e => console.error('로그아웃 오류:', e));
   document.getElementById('appShell').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
   const errEl = document.getElementById('loginError');
@@ -2807,7 +3027,7 @@ window.studentSetHw = async function(studentId, val){
   const key = studentId + ':' + todayKey;
   if(!records[key]) records[key] = {};
   records[key].hw = records[key].hw === val ? null : val;
-  await saveRecords();
+  await saveRecords(studentId);
   renderStudentViewForId(studentId);
 };
 
