@@ -186,6 +186,13 @@
   .login-hint{ font-size:11.5px; color:var(--ink-soft); text-align:center; margin-top:12px; }
   .login-error{ font-size:12px; color:var(--absent); margin-top:-8px; margin-bottom:14px; text-align:left; min-height:14px; }
 
+  /* ---- Login screen wrapper ---- */
+  .login-page{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    padding:20px; background:#F7F4EC;
+  }
+  .login-page-inner{ width:100%; max-width:380px; }
+
   /* ---- Student view ---- */
   .student-hw-card{ background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:18px; margin-bottom:14px; }
   .student-hw-card .hw-label{ font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-bottom:8px; }
@@ -482,7 +489,30 @@
 </style>
 </head>
 <body>
-<div class="app-shell">
+<div id="loginScreen" class="login-page">
+  <div class="login-page-inner">
+    <div class="brand-banner">
+      <div class="brand-badge"><span class="il">IL</span></div>
+      <div class="brand-wordmark">Inner Leader</div>
+      <div class="brand-tagline-text">원장님 전용 관리 시스템</div>
+    </div>
+    <div class="login-card">
+      <h2>원장 로그인</h2>
+      <div class="login-field">
+        <label>아이디</label>
+        <input id="loginId" type="text" autocomplete="username" placeholder="아이디를 입력하세요">
+      </div>
+      <div class="login-field">
+        <label>비밀번호</label>
+        <input id="loginPw" type="password" autocomplete="current-password" placeholder="비밀번호를 입력하세요">
+      </div>
+      <div class="login-error" id="loginError"></div>
+      <button class="login-btn" onclick="handleTeacherLogin()">로그인</button>
+      <div class="login-hint" id="loginHint"></div>
+    </div>
+  </div>
+</div>
+<div class="app-shell" id="appShell" style="display:none;">
   <aside class="sidebar">
     <div class="side-brand">
       <div class="side-logo">IL</div>
@@ -708,6 +738,7 @@
       </div>
       <button class="settings-save-btn" onclick="saveAccountSettings()">저장</button>
       <div class="save-msg" id="settingsSaveMsg"></div>
+      <button class="settings-save-btn" style="background:transparent; color:var(--absent); border:1px solid var(--absent); margin-top:8px;" onclick="handleTeacherLogout()">로그아웃</button>
     </div>
 
     <div class="settings-card">
@@ -861,7 +892,114 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script>
+// ---- Firebase(Firestore) 연동 ----
+// Firestore에 저장하되, SDK 로드 실패/네트워크 오류 시에는 localStorage로 자동 대체합니다.
+const LS_PREFIX = 'innerleader_storage__';
+const FIRESTORE_COLLECTION = 'innerleader_data';
+let db = null;
+
+try{
+  const firebaseConfig = {
+    apiKey: "AIzaSyC51kXQ1fsoASC2dvlpo8ZqRPlL5mV7m4Y",
+    authDomain: "inner-leader-7e44f.firebaseapp.com",
+    projectId: "inner-leader-7e44f",
+    storageBucket: "inner-leader-7e44f.firebasestorage.app",
+    messagingSenderId: "565345027852",
+    appId: "1:565345027852:web:6b095e559ee873b72a6b29"
+  };
+  if(window.firebase && firebase.initializeApp){
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.firestore();
+    console.log('Firestore 연결 완료');
+  } else {
+    console.warn('Firebase SDK를 불러오지 못해 localStorage로 대체합니다.');
+  }
+}catch(e){
+  console.error('Firebase 초기화 오류, localStorage로 대체합니다:', e);
+  db = null;
+}
+
+function lsGet(key){
+  try{
+    const raw = localStorage.getItem(LS_PREFIX + key);
+    if(raw === null) return null;
+    return { key, value: raw, shared: false };
+  }catch(e){ return null; }
+}
+function lsSet(key, value){
+  try{
+    localStorage.setItem(LS_PREFIX + key, value);
+    return { key, value, shared: false };
+  }catch(e){ return null; }
+}
+function lsDelete(key){
+  try{
+    localStorage.removeItem(LS_PREFIX + key);
+    return { key, deleted: true, shared: false };
+  }catch(e){ return null; }
+}
+function lsList(prefix){
+  try{
+    const keys = [];
+    for(let i=0;i<localStorage.length;i++){
+      const k = localStorage.key(i);
+      if(k && k.indexOf(LS_PREFIX) === 0){
+        const shortKey = k.slice(LS_PREFIX.length);
+        if(!prefix || shortKey.indexOf(prefix) === 0) keys.push(shortKey);
+      }
+    }
+    return { keys, prefix, shared: false };
+  }catch(e){ return null; }
+}
+
+if(!window.storage){
+  window.storage = {
+    async get(key){
+      if(db){
+        try{
+          const doc = await db.collection(FIRESTORE_COLLECTION).doc(key).get();
+          if(!doc.exists) return null;
+          return { key, value: doc.data().value, shared: false };
+        }catch(e){ console.error('Firestore get 오류, localStorage로 대체:', e); }
+      }
+      return lsGet(key);
+    },
+    async set(key, value){
+      if(db){
+        try{
+          await db.collection(FIRESTORE_COLLECTION).doc(key).set({ value, updatedAt: Date.now() });
+          return { key, value, shared: false };
+        }catch(e){ console.error('Firestore set 오류, localStorage로 대체:', e); }
+      }
+      return lsSet(key, value);
+    },
+    async delete(key){
+      if(db){
+        try{
+          await db.collection(FIRESTORE_COLLECTION).doc(key).delete();
+          return { key, deleted: true, shared: false };
+        }catch(e){ console.error('Firestore delete 오류, localStorage로 대체:', e); }
+      }
+      return lsDelete(key);
+    },
+    async list(prefix){
+      if(db){
+        try{
+          const snap = await db.collection(FIRESTORE_COLLECTION).get();
+          const keys = [];
+          snap.forEach(d => { if(!prefix || d.id.indexOf(prefix) === 0) keys.push(d.id); });
+          return { keys, prefix, shared: false };
+        }catch(e){ console.error('Firestore list 오류, localStorage로 대체:', e); }
+      }
+      return lsList(prefix);
+    }
+  };
+}
+
+
 const todayKey = new Date().toISOString().slice(0,10);
 const todayLabelText = new Date().toLocaleDateString('ko-KR', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
 document.getElementById('todayLabel').textContent = todayLabelText;
@@ -997,7 +1135,15 @@ async function loadAll(){
   render();
 
   if(lockedStudentId){
+    // 학부모/학생 공유 링크로 접속한 경우 원장 로그인 없이 바로 앱을 보여줍니다.
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appShell').style.display = 'flex';
     applyLockedView();
+  } else {
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('appShell').style.display = 'none';
+    const idEl = document.getElementById('loginId');
+    if(idEl) setTimeout(() => idEl.focus(), 30);
   }
 }
 
@@ -2293,6 +2439,13 @@ function classCommentsForStudentHtml(studentId){
   `;
 }
 
+(function(){
+  const idEl = document.getElementById('loginId');
+  const pwEl = document.getElementById('loginPw');
+  if(idEl) idEl.addEventListener('keydown', e => { if(e.key === 'Enter') handleTeacherLogin(); });
+  if(pwEl) pwEl.addEventListener('keydown', e => { if(e.key === 'Enter') handleTeacherLogin(); });
+})();
+
 loadAll();
 
 function setMode(mode){
@@ -2409,17 +2562,33 @@ window.handleTeacherLogin = async function(){
     try{
       await window.storage.set('teacherAuth', JSON.stringify(teacherAuth), true);
     }catch(e){ console.error('teacherAuth 저장 오류:', e); }
-    setMode('teacher');
+    idEl.value = ''; pwEl.value = '';
+    enterApp();
     return;
   }
 
   if(id === teacherAuth.id && pw === teacherAuth.pw){
     idEl.value = ''; pwEl.value = '';
-    setMode('teacher');
+    enterApp();
   } else {
     errEl.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.';
     pwEl.value = '';
   }
+};
+
+function enterApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appShell').style.display = 'flex';
+  setMode('home');
+}
+
+window.handleTeacherLogout = function(){
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  const errEl = document.getElementById('loginError');
+  if(errEl) errEl.textContent = '';
+  const idEl = document.getElementById('loginId');
+  if(idEl) setTimeout(() => idEl.focus(), 30);
 };
 
 function populateParentSelect(){
