@@ -513,7 +513,7 @@
   </div>
 </div>
 <div class="app-shell" id="appShell" style="display:none;">
-  <aside class="sidebar" id="sidebarEl">
+  <aside class="sidebar">
     <div class="side-brand">
       <div class="side-logo">IL</div>
       <div>
@@ -695,7 +695,7 @@
 
   <div id="parentView" style="display:none;">
     <div class="back-link" onclick="goHome()">← 홈으로</div>
-    <div class="hw-card">
+    <div class="hw-card" id="parentSelectWrap">
       <label>학생 선택</label>
       <select id="parentStudentSelect" onchange="renderParentView()"></select>
     </div>
@@ -704,7 +704,7 @@
 
   <div id="studentView" style="display:none;">
     <div class="back-link" onclick="goHome()">← 홈으로</div>
-    <div class="hw-card">
+    <div class="hw-card" id="studentSelectWrap">
       <label>학생 선택</label>
       <select id="studentViewSelect" onchange="renderStudentViewSelect()"></select>
     </div>
@@ -892,20 +892,25 @@
 </div>
 <div class="toast" id="toast"></div>
 
+<script>
+  // 학생/학부모 공유 링크(?student=...)로 접속하면 원장 로그인 화면이
+  // 잠깐이라도 보이지 않도록, 무거운 스크립트가 로드되기 전에 먼저 화면을 결정합니다.
+  (function(){
+    var params = new URLSearchParams(window.location.search);
+    var locked = params.get('student');
+    document.getElementById('loginScreen').style.display = locked ? 'none' : 'flex';
+    document.getElementById('appShell').style.display = locked ? 'flex' : 'none';
+  })();
+</script>
+
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
 <script>
 // ---- Firebase(Firestore) 연동 ----
 // Firestore에 저장하되, SDK 로드 실패/네트워크 오류 시에는 localStorage로 자동 대체합니다.
 const LS_PREFIX = 'innerleader_storage__';
 const FIRESTORE_COLLECTION = 'innerleader_data';
 let db = null;
-
-// Firestore 보안 규칙이 request.auth != null 을 요구하므로,
-// 데이터를 읽고 쓰기 전에 반드시 익명 로그인이 완료되어야 합니다.
-// 이 Promise는 로그인(성공/실패 상관없이) 시도가 끝날 때 resolve됩니다.
-let firebaseAuthReady = Promise.resolve();
 
 try{
   const firebaseConfig = {
@@ -920,18 +925,6 @@ try{
     firebase.initializeApp(firebaseConfig);
     db = firebase.firestore();
     console.log('Firestore 연결 완료');
-
-    if(firebase.auth){
-      firebaseAuthReady = firebase.auth().signInAnonymously()
-        .then(() => { console.log('익명 로그인 완료'); })
-        .catch((e) => {
-          console.error('익명 로그인 실패, localStorage로 대체합니다:', e);
-          db = null; // 인증이 안 되면 Firestore 접근은 계속 실패하므로 아예 로컬 저장소만 사용
-        });
-    } else {
-      console.warn('Firebase Auth SDK를 불러오지 못해 localStorage로 대체합니다.');
-      db = null;
-    }
   } else {
     console.warn('Firebase SDK를 불러오지 못해 localStorage로 대체합니다.');
   }
@@ -976,7 +969,6 @@ function lsList(prefix){
 if(!window.storage){
   window.storage = {
     async get(key){
-      await firebaseAuthReady;
       if(db){
         try{
           const doc = await db.collection(FIRESTORE_COLLECTION).doc(key).get();
@@ -987,7 +979,6 @@ if(!window.storage){
       return lsGet(key);
     },
     async set(key, value){
-      await firebaseAuthReady;
       if(db){
         try{
           await db.collection(FIRESTORE_COLLECTION).doc(key).set({ value, updatedAt: Date.now() });
@@ -997,7 +988,6 @@ if(!window.storage){
       return lsSet(key, value);
     },
     async delete(key){
-      await firebaseAuthReady;
       if(db){
         try{
           await db.collection(FIRESTORE_COLLECTION).doc(key).delete();
@@ -1007,7 +997,6 @@ if(!window.storage){
       return lsDelete(key);
     },
     async list(prefix){
-      await firebaseAuthReady;
       if(db){
         try{
           const snap = await db.collection(FIRESTORE_COLLECTION).get();
@@ -1183,22 +1172,10 @@ function renderNoticeBanner(){
 
 function applyLockedView(){
   const student = students.find(s => s.id === lockedStudentId);
-
-  // 학생/학부모 링크로 접속한 경우, 사이드바(원장 전용 메뉴)를 완전히 숨겨서
-  // 해당 학생/학부모가 다른 학생 정보나 관리자 화면으로 이동할 수 없게 합니다.
-  const sidebarEl = document.getElementById('sidebarEl');
-  if(sidebarEl) sidebarEl.style.display = 'none';
-
   document.getElementById('homeView').style.display = 'none';
   document.getElementById('teacherView').style.display = 'none';
   document.getElementById('parentView').style.display = 'none';
   document.getElementById('studentView').style.display = 'none';
-  document.getElementById('settingsView').style.display = 'none';
-  document.getElementById('scheduleView').style.display = 'none';
-  document.getElementById('reportView').style.display = 'none';
-  document.getElementById('plannerView').style.display = 'none';
-  document.getElementById('qnaView').style.display = 'none';
-  document.getElementById('classView').style.display = 'none';
 
   const viewId = lockedRole === 'student' ? 'studentView' : 'parentView';
   document.getElementById(viewId).style.display = '';
@@ -1210,8 +1187,8 @@ function applyLockedView(){
     ? student.name + (lockedRole === 'student' ? ' 학습 플래너' : ' 학습 현황')
     : '학습 현황';
 
-  const wrapId = lockedRole === 'student' ? 'studentViewSelect' : 'parentStudentSelect';
-  const selectWrap = document.getElementById(wrapId).parentElement;
+  const wrapId = lockedRole === 'student' ? 'studentSelectWrap' : 'parentSelectWrap';
+  const selectWrap = document.getElementById(wrapId);
   const summaryId = lockedRole === 'student' ? 'studentSummary' : 'parentSummary';
 
   if(!student){
@@ -1255,7 +1232,8 @@ window.checkPinGate = function(studentId, correctPin){
   if(!el) return;
   if(el.value.trim() === correctPin){
     const student = students.find(s => s.id === studentId);
-    const selectWrap = document.getElementById('parentStudentSelect').parentElement;
+    const wrapId = lockedRole === 'student' ? 'studentSelectWrap' : 'parentSelectWrap';
+    const selectWrap = document.getElementById(wrapId);
     selectWrap.innerHTML = '<label>학생</label><div class="locked-name">' + student.name + '</div>';
     renderLockedContent(studentId);
   } else {
@@ -2483,9 +2461,6 @@ function classCommentsForStudentHtml(studentId){
 loadAll();
 
 function setMode(mode){
-  // 학생/학부모 전용 링크(?student=...)로 들어온 경우, 원장님 전용 화면으로는
-  // 어떤 경로로도 전환되지 않도록 막습니다.
-  if(lockedStudentId) return;
   const homeView = document.getElementById('homeView');
   const teacherView = document.getElementById('teacherView');
   const parentView = document.getElementById('parentView');
