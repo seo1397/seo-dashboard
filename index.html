@@ -2237,68 +2237,6 @@ window.deletePlanEntry = async function(id){
   if(entry) renderPlannerForStudent(entry.studentId);
 };
 
-// ---- 학생 화면에서 직접 쓰는 이번 주 계획 (플래너와 동일한 데이터를 공유) ----
-window.addStudentPlanEntry = async function(studentId){
-  const dateEl = document.getElementById('studentPlanDate_' + studentId);
-  const titleEl = document.getElementById('studentPlanTitle_' + studentId);
-  const date = dateEl.value || todayKey;
-  const title = titleEl.value.trim();
-  if(!title) return;
-  planEntries.push({ id: 'p' + Date.now(), studentId, date, title, done: false });
-  await savePlanEntries(studentId);
-  titleEl.value = '';
-  renderStudentViewForId(studentId);
-};
-
-window.toggleStudentPlanDone = async function(id, studentId){
-  const entry = planEntries.find(p => p.id === id);
-  if(!entry) return;
-  entry.done = !entry.done;
-  await savePlanEntries(studentId);
-  renderStudentViewForId(studentId);
-};
-
-window.deleteStudentPlanEntry = async function(id, studentId){
-  planEntries = planEntries.filter(p => p.id !== id);
-  await savePlanEntries(studentId);
-  renderStudentViewForId(studentId);
-};
-
-function studentPlannerHtml(studentId){
-  const todayPlans = planEntries.filter(p => p.studentId === studentId && p.date === todayKey);
-  const todayDone = todayPlans.filter(p => p.done).length;
-  const dday = studentDDay[studentId];
-  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
-  const ddayLine = ddayText(effectiveDday);
-
-  const weekDates = getWeekRange();
-  const weekPlans = planEntries
-    .filter(p => p.studentId === studentId && weekDates.includes(p.date))
-    .sort((a,b) => a.date.localeCompare(b.date));
-
-  const weekListHtml = weekPlans.length === 0
-    ? '<div class="sched-empty">이번 주 작성된 계획이 없습니다. 아래에서 추가해보세요.</div>'
-    : weekPlans.map(p => `
-      <div class="plan-item ${p.done ? 'done' : ''}">
-        <input type="checkbox" class="plan-check" ${p.done ? 'checked' : ''} onchange="toggleStudentPlanDone('${p.id}','${studentId}')">
-        <div class="plan-date">${p.date.slice(5).replace('-','.')}</div>
-        <div class="plan-title">${escapeHtml(p.title)}</div>
-        <div class="sched-del" onclick="deleteStudentPlanEntry('${p.id}','${studentId}')">삭제</div>
-      </div>
-    `).join('');
-
-  return `
-    <div class="planner-stat-row">✅ 오늘 달성률: <b>${todayDone} / ${todayPlans.length}</b></div>
-    ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
-    <div class="sched-list" style="margin-top:8px;">${weekListHtml}</div>
-    <div class="plan-add-row">
-      <input id="studentPlanDate_${studentId}" type="date" value="${todayKey}">
-      <input id="studentPlanTitle_${studentId}" type="text" placeholder="계획 내용 (예: 수학의 정석 p.90~95)">
-    </div>
-    <button class="settings-save-btn" style="width:100%; margin-top:8px;" onclick="addStudentPlanEntry('${studentId}')">계획 추가</button>
-  `;
-}
-
 function parentPlannerHtml(studentId){
   if(!parentVisible[studentId]){
     return '<div class="sched-empty">🔒 선생님이 아직 플래너 공개를 설정하지 않았습니다.</div>';
@@ -3177,11 +3115,6 @@ function renderStudentViewForId(studentId){
     </div>
 
     ${hwChecklistStudentHtml(studentId)}
-
-    <div class="settings-card">
-      <h3 style="margin:0 0 4px;">🗓️ 이번 주 계획</h3>
-      ${studentPlannerHtml(studentId)}
-    </div>
 
     <div class="hw-card">
       <label>📅 다가오는 일정</label>
