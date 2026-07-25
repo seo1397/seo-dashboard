@@ -516,6 +516,7 @@
     .qa-grid{ grid-template-columns:repeat(2,1fr); }
   }
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="loginScreen" class="login-page">
@@ -777,6 +778,17 @@
     </div>
 
     <div class="settings-card">
+      <h3>📊 월간 데이터 내보내기</h3>
+      <div class="settings-desc">선택한 달의 출결·숙제·일정·질문 데이터를 엑셀 파일로 내려받습니다.</div>
+      <div class="settings-field">
+        <label>내보낼 월</label>
+        <input id="exportMonthInput" type="month">
+      </div>
+      <button class="settings-save-btn" onclick="exportMonthlyExcel()">엑셀로 내보내기</button>
+      <div class="save-msg" id="exportSaveMsg"></div>
+    </div>
+
+    <div class="settings-card">
       <h3>📆 전체 기본 D-Day</h3>
       <div class="settings-desc">학생 플래너에서 개별 D-Day를 비워두면 이 기본값이 대신 표시됩니다.</div>
       <div class="settings-field">
@@ -896,7 +908,7 @@
 
   <div id="qnaView" style="display:none;">
     <div class="back-link" onclick="goHome()">← 홈으로</div>
-    <div class="settings-desc" style="margin-bottom:14px;">학생이 남긴 질문에 답변을 남기면 그 학생 화면에 바로 표시됩니다.</div>
+    <div class="settings-desc" style="margin-bottom:14px;">학생·학부모가 남긴 질문에 답변을 남기면 해당 화면에 바로 표시됩니다.</div>
     <div id="qnaTeacherList"></div>
   </div>
 
@@ -979,11 +991,7 @@ try{
   auth = null;
 }
 
-// Firebase Authentication 로그인 방식을 여기서 정합니다.
-// - 원장님: 실제 이메일/비밀번호 로그인 (Firestore 규칙에서 "원장님인지" 구분하는 기준이 됩니다)
-// - 학생/학부모: 화면에는 안 보이지만 뒤에서 조용히 "익명 로그인"만 처리
 function teacherIdToEmail(id){
-  // Firebase Authentication은 이메일 형식이 필요해서, 아이디를 내부용 가짜 이메일로 바꿔줍니다.
   const safe = String(id).toLowerCase().replace(/[^a-z0-9._-]/g, '');
   return (safe || 'director') + '@innerleader-app.local';
 }
@@ -1034,9 +1042,6 @@ function lsList(prefix){
   }catch(e){ return null; }
 }
 
-// ---- 학생별 공개 데이터 (student_public 컬렉션) ----
-// 원장님 전용 데이터(innerleader_data)와 분리된, "그 학생 한 명"의 데이터만 담는 문서입니다.
-// 학생/학부모 링크는 이 컬렉션의 자기 학생 문서 하나만 읽어오며, 원장님 전용 데이터는 아예 요청하지 않습니다.
 const PUBLIC_COLLECTION = 'student_public';
 const LS_PUBLIC_PREFIX = 'innerleader_public__';
 
@@ -1074,10 +1079,6 @@ async function publicDocDelete(studentId){
   try{ localStorage.removeItem(LS_PUBLIC_PREFIX + studentId); return true; }catch(e){ return false; }
 }
 
-// 현재 메모리에 있는 데이터에서 특정 학생 한 명의 몫만 뽑아 "공개용 스냅샷"을 만듭니다.
-// (원장님 모드에서는 students 배열 전체를 순회해 모든 학생 몫을 만들고,
-//  학생/학부모 잠긴 모드에서는 students 배열에 이미 자기 자신 한 명만 들어있으므로
-//  결과적으로 자기 자신의 스냅샷만 다시 만들어 올리는 셈이 됩니다.)
 function buildStudentSnapshot(studentId){
   const student = students.find(s => s.id === studentId);
   if(!student) return null;
@@ -1182,7 +1183,6 @@ document.getElementById('todayLabel').textContent = todayLabelText;
 const wcDateEl = document.getElementById('wcDate');
 if(wcDateEl) wcDateEl.textContent = todayLabelText + ' · 원장님 환영합니다 👋';
 
-// ---- 날짜별 숙제 확인용 헬퍼 (관리자/학생/학부모 화면 공용) ----
 function shiftDateStr(dateStr, delta){
   const dt = new Date(dateStr + 'T00:00:00');
   dt.setDate(dt.getDate() + delta);
@@ -1247,32 +1247,29 @@ const urlParams = new URLSearchParams(window.location.search);
 const lockedStudentId = urlParams.get('student');
 const lockedRole = urlParams.get('role') === 'student' ? 'student' : 'parent';
 
-let students = [];   // [{id, name}]
-let records = {};    // { "studentId:date": {att: 'good'|'warn'|'absent'|null, hw: 'good'|'warn'|'absent'|null} }
-let homeworkByDate = {}; // { date: text }
-let studentHwItems = {}; // { "studentId:date": [{id, text, done}] } — 학생이 직접 적은 오늘의 숙제 목록 (항목별 체크)
-let teacherAuth = null; // { id, pw } or null if not yet set up
-let notice = ''; // announcement text shown on home banner
-let schedule = []; // [{id, studentId:'all'|id, type:'exam'|'test'|'vacation'|'etc', date:'YYYY-MM-DD', title}]
+let students = [];
+let records = {};
+let homeworkByDate = {};
+let studentHwItems = {};
+let teacherAuth = null;
+let notice = '';
+let schedule = [];
 let selectedSchedType = 'exam';
-let studyTimeByDate = {}; // { "studentId:date": totalSeconds }
-let progressByStudent = {}; // { studentId: text }
-let testScores = []; // [{id, studentId, title, score, maxScore, date}]
-let planEntries = []; // [{id, studentId, date:'YYYY-MM-DD', title, done}]
-let studentDDay = {}; // { studentId: {title, date} }
-let defaultDDay = null; // {title, date} or null
-let parentVisible = {}; // { studentId: boolean } - whether planner is shown to that student's parent
-let questions = []; // [{id, studentId, text, answer, date, answeredAt}]
-let homeworkItems = []; // [{id, date, text}]
-let homeworkItemChecks = {}; // { "studentId:itemId": true }
-let classes = []; // [{id, name}]
-let classOf = {}; // { studentId: classId }
-let classComments = []; // [{id, classId, text, date}]
+let studyTimeByDate = {};
+let progressByStudent = {};
+let testScores = [];
+let planEntries = [];
+let studentDDay = {};
+let defaultDDay = null;
+let parentVisible = {};
+let questions = []; // [{id, studentId, text, answer, date, answeredAt, askedBy:'student'|'parent'}]
+let homeworkItems = [];
+let homeworkItemChecks = {};
+let classes = [];
+let classOf = {};
+let classComments = [];
 
 async function loadLockedStudentData(){
-  // 학생/학부모 공유 링크로 접속했을 때만 실행됩니다.
-  // 원장님 전용 데이터(innerleader_data)는 절대 요청하지 않고,
-  // 이 학생 한 명의 공개 스냅샷(student_public/{id})만 가져옵니다.
   const snap = await publicDocGet(lockedStudentId);
   if(!snap){
     students = [];
@@ -1297,7 +1294,7 @@ async function loadLockedStudentData(){
     classOf = snap.classId ? { [snap.id]: snap.classId } : {};
     classComments = snap.classComments || [];
   }
-  teacherAuth = null; // 학생/학부모 세션에서는 절대 채우지 않습니다.
+  teacherAuth = null;
 
   renderNoticeBanner();
   render();
@@ -1316,7 +1313,6 @@ async function loadAll(){
     return;
   }
 
-  // 원장님 데이터는 로그인 전에는 아예 요청하지 않습니다 (로그인 화면만 먼저 보여줍니다).
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('appShell').style.display = 'none';
   const idEl = document.getElementById('loginId');
@@ -1404,10 +1400,6 @@ async function loadTeacherData(){
     classComments = cc ? JSON.parse(cc.value) : [];
   }catch(e){ classComments = []; }
 
-  // 학생이 스스로 남긴 기록(숙제 체크, 공부 타이머, 질문)은
-  // student_public 문서에서 가져와 원장님 화면에 반영합니다.
-  // (학생/학부모는 innerleader_data에 쓸 수 없도록 막혀 있으므로,
-  //  자기 스스로 남긴 기록은 student_public에만 저장되어 있습니다.)
   for(const s of students){
     let pub = null;
     try{ pub = await publicDocGet(s.id); }catch(e){ pub = null; }
@@ -1427,12 +1419,12 @@ async function loadTeacherData(){
       pub.questions.forEach(pq => {
         const idx = questions.findIndex(x => x.id === pq.id);
         if(idx === -1) questions.push(pq);
-        else questions[idx] = pq; // 학생이 새로 남긴 질문 반영(답변은 원장님 쪽이 최신)
+        else questions[idx] = pq;
       });
     }
     if(pub.planEntries){
       planEntries = planEntries.filter(p => p.studentId !== s.id);
-      planEntries.push(...pub.planEntries); // 그 학생의 계획은 공개 스냅샷을 최신 상태로 취급 (학생이 삭제한 것도 반영됨)
+      planEntries.push(...pub.planEntries);
     }
   }
   updateQnaBadges();
@@ -1726,7 +1718,6 @@ document.getElementById('addStudentBtn').addEventListener('click', addStudent);
 document.getElementById('newName').addEventListener('keydown', e => { if(e.key === 'Enter') addStudent(); });
 
 function randomIdSuffix(){
-  // 링크에 들어가는 학생 ID를 추측하기 어렵게 무작위 문자열을 덧붙입니다.
   return Math.random().toString(36).slice(2, 10);
 }
 
@@ -1833,7 +1824,97 @@ window.saveAccountSettings = async function(){
   }
 };
 
-// ---- Schedule / calendar ----
+// ---- 월간 엑셀 내보내기 ----
+window.exportMonthlyExcel = async function(){
+  const monthInput = document.getElementById('exportMonthInput');
+  const msg = document.getElementById('exportSaveMsg');
+  let monthStr = monthInput.value;
+  if(!monthStr){ monthStr = todayKey.slice(0,7); monthInput.value = monthStr; }
+  const prefix = monthStr;
+
+  function classNameOf(sid){
+    const cid = classOf[sid];
+    const c = classes.find(c => c.id === cid);
+    return c ? c.name : '';
+  }
+
+  const attRows = [['날짜','학생명','반','출석','숙제상태']];
+  students.forEach(s => {
+    Object.keys(records).forEach(key => {
+      if(key.indexOf(s.id + ':') !== 0) return;
+      const date = key.slice(s.id.length + 1);
+      if(date.indexOf(prefix) !== 0) return;
+      const rec = records[key];
+      if(!rec.att && !rec.hw) return;
+      attRows.push([date, s.name, classNameOf(s.id), statusLabel(rec.att,'att'), statusLabel(rec.hw,'hw')]);
+    });
+  });
+
+  const hwRows = [['날짜','학생명','숙제 항목','완료여부']];
+  Object.keys(studentHwItems).forEach(key => {
+    const idx = key.lastIndexOf(':');
+    const sid = key.slice(0, idx);
+    const date = key.slice(idx + 1);
+    if(date.indexOf(prefix) !== 0) return;
+    const student = students.find(s => s.id === sid);
+    if(!student) return;
+    (studentHwItems[key] || []).forEach(item => {
+      hwRows.push([date, student.name, item.text, item.done ? '완료' : '미완료']);
+    });
+  });
+
+  const teacherHwRows = [['날짜','등록된 숙제 내용']];
+  Object.keys(homeworkByDate).forEach(date => {
+    if(date.indexOf(prefix) !== 0) return;
+    if(homeworkByDate[date]) teacherHwRows.push([date, homeworkByDate[date]]);
+  });
+
+  const schedRows = [['날짜','대상','종류','내용']];
+  schedule.forEach(ev => {
+    if(ev.date.indexOf(prefix) !== 0) return;
+    const who = ev.studentId === 'all' ? '전체 학생' : (students.find(s => s.id === ev.studentId)?.name || '알 수 없음');
+    schedRows.push([ev.date, who, schedTypeLabel(ev.type), ev.title]);
+  });
+
+  const qnaRows = [['날짜','학생명','질문자','질문','답변여부','답변내용']];
+  questions.forEach(q => {
+    if(q.date.indexOf(prefix) !== 0) return;
+    const student = students.find(s => s.id === q.studentId);
+    qnaRows.push([q.date, student ? student.name : '알 수 없음', q.askedBy === 'parent' ? '학부모' : '학생', q.text, q.answer ? '답변완료' : '미답변', q.answer || '']);
+  });
+
+  const summaryRows = [['학생명','반','출석일수','결석일수','지각일수','숙제완료일수','숙제부분/미완료일수','이번달 질문수','미답변 질문수']];
+  students.forEach(s => {
+    let att=0, absent=0, warn=0, hwGood=0, hwBad=0;
+    Object.keys(records).forEach(key => {
+      if(key.indexOf(s.id + ':') !== 0) return;
+      const date = key.slice(s.id.length + 1);
+      if(date.indexOf(prefix) !== 0) return;
+      const r = records[key];
+      if(r.att === 'good') att++;
+      else if(r.att === 'absent') absent++;
+      else if(r.att === 'warn') warn++;
+      if(r.hw === 'good') hwGood++;
+      else if(r.hw) hwBad++;
+    });
+    const myQ = questions.filter(q => q.studentId === s.id && q.date.indexOf(prefix) === 0);
+    summaryRows.push([s.name, classNameOf(s.id), att, absent, warn, hwGood, hwBad, myQ.length, myQ.filter(q => !q.answer).length]);
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), '월간요약');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(attRows), '출결');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hwRows), '숙제(학생작성)');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(teacherHwRows), '숙제(선생님등록)');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(schedRows), '일정');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(qnaRows), '질문Q&A');
+  XLSX.writeFile(wb, `이너리더_${monthStr}_리포트.xlsx`);
+
+  msg.style.color = 'var(--good)';
+  msg.textContent = '다운로드 완료 ✓';
+  setTimeout(() => msg.textContent = '', 2000);
+};
+
 function schedTypeLabel(type){
   return type === 'exam' ? '시험' : type === 'test' ? '테스트' : type === 'vacation' ? '방학' : '기타';
 }
@@ -1941,7 +2022,6 @@ function studentScheduleHtml(studentId){
   }).join('') + '</div>';
 }
 
-// ---- Study time (순공시간) ----
 async function saveStudyTime(studentId){
   try{
     const r = await window.storage.set('studyTime', JSON.stringify(studyTimeByDate), true);
@@ -1963,12 +2043,11 @@ function studentStudyTimeSummary(studentId){
   dates.forEach((d, i) => {
     const secs = studyTimeByDate[studentId + ':' + d] || 0;
     last14 += secs;
-    if(i >= 7) last7 += secs; // last 7 entries in a 14-day array (index 7~13) are the most recent 7 days
+    if(i >= 7) last7 += secs;
   });
   return { last7, last14 };
 }
 
-// ---- Progress notes (진도) ----
 async function saveProgress(studentId){
   try{
     const r = await window.storage.set('progress', JSON.stringify(progressByStudent), true);
@@ -1977,7 +2056,6 @@ async function saveProgress(studentId){
   if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
 
-// ---- Test scores (시험 점수) ----
 async function saveTestScores(studentId){
   try{
     const r = await window.storage.set('testScores', JSON.stringify(testScores), true);
@@ -2113,7 +2191,6 @@ function parentReportHtml(studentId){
   `;
 }
 
-// ---- Student planner ----
 async function saveDefaultDday(){
   const titleEl = document.getElementById('defaultDdayTitle');
   const dateEl = document.getElementById('defaultDdayDate');
@@ -2159,7 +2236,7 @@ async function saveParentVisible(studentId){
 
 function getWeekRange(){
   const now = new Date();
-  const day = now.getDay(); // 0=Sun..6=Sat
+  const day = now.getDay();
   const diffToMon = day === 0 ? -6 : 1 - day;
   const mon = new Date(now);
   mon.setDate(now.getDate() + diffToMon);
@@ -2365,7 +2442,6 @@ function parentPlannerHtml(studentId){
   `;
 }
 
-// ---- Q&A ----
 async function saveQuestions(studentId){
   try{
     const r = await window.storage.set('questions', JSON.stringify(questions), true);
@@ -2391,11 +2467,22 @@ window.submitStudentQuestion = async function(studentId){
   const input = document.getElementById('studentQuestionInput');
   const text = input.value.trim();
   if(!text) return;
-  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null });
+  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null, askedBy: 'student' });
   await saveQuestions(studentId);
   updateQnaBadges();
   input.value = '';
   renderStudentViewForId(studentId);
+};
+
+window.submitParentQuestion = async function(studentId){
+  const input = document.getElementById('parentQuestionInput');
+  const text = input.value.trim();
+  if(!text) return;
+  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null, askedBy: 'parent' });
+  await saveQuestions(studentId);
+  updateQnaBadges();
+  input.value = '';
+  renderParentViewForId(studentId);
 };
 
 function studentQnaListHtml(studentId){
@@ -2403,7 +2490,7 @@ function studentQnaListHtml(studentId){
   if(mine.length === 0) return '<div class="sched-empty">아직 남긴 질문이 없습니다.</div>';
   return mine.map(q => `
     <div class="qna-item">
-      <div class="qna-top"><span class="qna-date">${q.date}</span></div>
+      <div class="qna-top"><span class="qna-date">${q.date} · ${q.askedBy === 'parent' ? '👨‍👩‍👧 학부모 질문' : '🎓 학생 질문'}</span></div>
       <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
       <div class="qna-question">${q.text}</div>
       ${q.answer ? `<div class="qna-answer-display">👩‍🏫 ${q.answer}</div>` : ''}
@@ -2419,12 +2506,13 @@ window.renderQnaTeacherList = function(){
     return;
   }
   const sorted = [...questions].sort((a,b) => {
-    if(!!a.answer !== !!b.answer) return a.answer ? 1 : -1; // unanswered first
+    if(!!a.answer !== !!b.answer) return a.answer ? 1 : -1;
     return b.date.localeCompare(a.date);
   });
   list.innerHTML = sorted.map(q => {
     const student = students.find(s => s.id === q.studentId);
     const who = student ? student.name : '알 수 없음';
+    const askerTag = q.askedBy === 'parent' ? '👨‍👩‍👧 학부모' : '🎓 학생';
     const answerBlock = q.answer
       ? `<div class="qna-answer-display">👩‍🏫 ${q.answer}</div>
          <span class="qna-edit-link" onclick="startEditAnswer('${q.id}')">답변 수정</span>`
@@ -2435,7 +2523,7 @@ window.renderQnaTeacherList = function(){
     return `
       <div class="qna-item">
         <div class="qna-top">
-          <span class="qna-student">${who}</span>
+          <span class="qna-student">${who} <span style="font-weight:400; color:var(--ink-soft); font-size:11px;">(${askerTag})</span></span>
           <span class="qna-date">${q.date}</span>
         </div>
         <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
@@ -2473,7 +2561,6 @@ window.answerQuestion = async function(id){
   window.renderQnaTeacherList();
 };
 
-// ---- Homework checklist (과제별 체크) ----
 async function saveHomeworkItems(){
   try{
     const r = await window.storage.set('homeworkItems', JSON.stringify(homeworkItems), true);
@@ -2539,7 +2626,7 @@ function renderHwItemList(){
 
 function recomputeHwStatus(studentId){
   const items = todaysHomeworkItems();
-  if(items.length === 0) return; // no items today: leave manual status untouched
+  if(items.length === 0) return;
   const doneCount = items.filter(i => homeworkItemChecks[studentId + ':' + i.id]).length;
   const key = studentId + ':' + todayKey;
   if(!records[key]) records[key] = {};
@@ -2602,7 +2689,6 @@ function hwChecklistParentHtml(studentId, date){
   `;
 }
 
-// ---- 학생이 직접 적는 날짜별 숙제 목록 (학생/원장님/학부모 모두에게 보임) ----
 function todaysStudentHwItems(studentId){
   return studentHwItemsForDate(studentId, todayKey);
 }
@@ -2613,14 +2699,13 @@ function studentHwItemsForDate(studentId, date){
 function recomputeStudentHwStatus(studentId, date){
   date = date || todayKey;
   const items = studentHwItemsForDate(studentId, date);
-  if(items.length === 0) return; // 학생이 적은 항목이 없으면 기존 상태를 건드리지 않습니다
+  if(items.length === 0) return;
   const doneCount = items.filter(i => i.done).length;
   const key = studentId + ':' + date;
   if(!records[key]) records[key] = {};
   records[key].hw = doneCount === items.length ? 'good' : doneCount > 0 ? 'warn' : null;
 }
 
-// 항목 추가는 항상 "오늘" 날짜에만 가능합니다 (과거 날짜는 조회만 가능)
 window.addStudentHwItem = async function(studentId){
   const input = document.getElementById('myHwItemInput_' + studentId);
   if(!input) return;
@@ -2657,7 +2742,6 @@ window.deleteStudentHwItem = async function(studentId, itemId, date){
   renderStudentViewForId(studentId);
 };
 
-// date: 조회할 날짜. editable: 체크/삭제/추가 가능 여부 (학생 화면에서 "오늘"일 때만 true로 넘어옵니다)
 function studentHwListHtml(studentId, date, editable){
   const items = studentHwItemsForDate(studentId, date);
   const isToday = date === todayKey;
@@ -2684,7 +2768,6 @@ function studentHwListHtml(studentId, date, editable){
   return `<div class="sched-list">${listHtml}</div>${addRow}`;
 }
 
-// ---- Class management (반 관리) ----
 async function saveClasses(){
   try{
     const r = await window.storage.set('classes', JSON.stringify(classes), true);
@@ -3031,10 +3114,6 @@ window.handleTeacherLogin = async function(){
     idEl.value = ''; pwEl.value = '';
     await enterApp();
   }catch(err){
-    // 최신 Firebase SDK는 "계정 없음"과 "비밀번호 틀림"을 구분하지 않고
-    // 둘 다 auth/invalid-credential로 반환하므로, 두 경우 모두 일단
-    // 계정 생성을 시도해봅니다. 이미 존재하는 계정이면 아래에서
-    // auth/email-already-in-use로 걸러져 "비밀번호가 틀렸다"고 정확히 안내됩니다.
     if(err && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential')){
       try{
         await auth.createUserWithEmailAndPassword(email, pw);
@@ -3173,13 +3252,21 @@ function renderParentViewForId(studentId){
     ${classCommentsForStudentHtml(studentId)}
 
     <div class="hw-card">
+      <label>💬 선생님께 질문하기</label>
+      <div class="qna-ask-row" style="margin-top:8px;">
+        <textarea id="parentQuestionInput" placeholder="선생님께 궁금한 점을 남겨보세요."></textarea>
+        <button class="qna-answer-btn" onclick="submitParentQuestion('${studentId}')">등록</button>
+      </div>
+      <div style="margin-top:12px;">${studentQnaListHtml(studentId)}</div>
+    </div>
+
+    <div class="hw-card">
       <label>최근 14일 출석 기록</label>
       <div class="history" style="margin-top:8px;">${dots}</div>
     </div>
   `;
 };
 
-// ---- Student View (direct access) ----
 function populateStudentViewSelect(){
   const sel = document.getElementById('studentViewSelect');
   if(!sel) return;
@@ -3199,7 +3286,6 @@ window.renderStudentViewSelect = function(){
   renderStudentViewForId(studentId);
 };
 
-// ---- Student View ----
 let timerInterval = null;
 let timerSeconds = 0;
 let timerRunning = false;
