@@ -145,28 +145,6 @@
     border:1px solid var(--accent); background:transparent; color:var(--accent);
     font-size:11px; font-weight:700; padding:5px 8px; border-radius:6px; cursor:pointer; white-space:nowrap;
   }
-
-  .hw-datenav{
-    display:flex; align-items:center; justify-content:space-between; gap:8px;
-    background:var(--paper); border:1px solid var(--line); border-radius:10px;
-    padding:8px 10px; margin-bottom:12px;
-  }
-  .hw-datenav-arrow{
-    border:1px solid var(--line); background:transparent; color:var(--ink);
-    width:30px; height:30px; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer;
-    flex-shrink:0; display:flex; align-items:center; justify-content:center;
-  }
-  .hw-datenav-arrow:disabled{ opacity:.3; cursor:default; }
-  .hw-datenav-mid{ display:flex; align-items:center; justify-content:center; gap:8px; flex:1; min-width:0; }
-  .hw-datenav-label{ font-size:13.5px; font-weight:800; color:var(--ink); white-space:nowrap; }
-  .hw-datenav-badge{
-    font-size:10.5px; font-weight:800; color:var(--good); background:var(--good-bg);
-    padding:2px 7px; border-radius:20px; flex-shrink:0;
-  }
-  .hw-datenav-todaybtn{
-    border:1px solid var(--accent); background:transparent; color:var(--accent);
-    font-size:11px; font-weight:700; padding:5px 9px; border-radius:7px; cursor:pointer; flex-shrink:0; white-space:nowrap;
-  }
   .toast{
     position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
     background:var(--ink); color:#fff; padding:10px 18px; border-radius:8px;
@@ -387,6 +365,25 @@
   .sched-del:hover{ color:var(--absent); }
   .sched-empty{ text-align:center; padding:24px 12px; color:var(--ink-soft); font-size:13px; }
 
+  /* ---- Homework date-picker calendar (학생/학부모/관리 공용) ---- */
+  .hw-cal{ background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:20px; }
+  .hw-cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .hw-cal-title{ font-size:13.5px; font-weight:800; color:var(--ink); }
+  .hw-cal-nav{ width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:15px; color:var(--ink-soft); cursor:pointer; user-select:none; }
+  .hw-cal-nav:hover{ background:var(--bg); color:var(--ink); }
+  .hw-cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .hw-cal-dow{ text-align:center; font-size:10.5px; font-weight:700; color:var(--ink-soft); padding-bottom:4px; }
+  .hw-cal-day{ position:relative; text-align:center; padding:7px 0; border-radius:8px; font-size:12px; color:var(--ink); cursor:pointer; font-variant-numeric:tabular-nums; }
+  .hw-cal-day:hover{ background:var(--bg); }
+  .hw-cal-day.other-month{ color:#C7C3B6; cursor:default; }
+  .hw-cal-day.other-month:hover{ background:none; }
+  .hw-cal-day.today{ box-shadow:inset 0 0 0 1.5px var(--ink); font-weight:800; }
+  .hw-cal-day.selected{ background:var(--ink); color:#fff; font-weight:800; }
+  .hw-cal-day .dot-mark{ position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--warn); }
+  .hw-cal-day.selected .dot-mark{ background:#fff; }
+  .hw-cal-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-size:12px; color:var(--ink-soft); }
+  .hw-cal-today-btn{ font-weight:700; color:var(--ink); cursor:pointer; text-decoration:underline; }
+
   .report-title{ font-size:15px; font-weight:800; color:var(--ink); }
   .report-sub{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
 
@@ -516,7 +513,6 @@
     .qa-grid{ grid-template-columns:repeat(2,1fr); }
   }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body>
 <div id="loginScreen" class="login-page">
@@ -677,25 +673,22 @@
 
   <div id="teacherView" style="display:none;">
   <div class="back-link" onclick="goHome()">← 홈으로</div>
+
+  <div id="teacherHwCal"></div>
+
   <div class="hw-card">
-    <label>오늘의 숙제</label>
+    <label id="hwCardLabel">오늘의 숙제</label>
     <input id="hwInput" type="text" placeholder="예: 수학의 정석 p.84~89, 12~20번 / 모의고사 3회 오답정리">
     <div class="save-msg" id="hwSaveMsg"></div>
   </div>
 
   <div class="settings-card">
-    <label style="display:block; margin-bottom:8px;">📅 숙제 확인 날짜</label>
-    <div class="settings-desc">아래 체크리스트와 출결·숙제 명단은 선택한 날짜 기준으로 보여집니다. 학생·학부모 화면에서도 같은 날짜의 기록을 확인할 수 있어요.</div>
-    <div id="teacherHwDateNav" style="margin-top:8px;"></div>
-  </div>
-
-  <div class="settings-card">
     <h3 id="hwItemListTitle">✅ 오늘의 숙제 체크리스트</h3>
     <div class="settings-desc">과제를 항목별로 등록하면 학생 전용 앱에서 학생이 각자 체크할 수 있어요.</div>
-    <div class="plan-add-row" id="hwItemAddRow">
+    <div class="plan-add-row">
       <input id="hwItemInput" type="text" placeholder="예: 수학의 정석 p.84~89 풀기" style="flex:1;">
     </div>
-    <button class="settings-save-btn" id="hwItemAddBtn" style="width:100%; margin-top:8px;" onclick="addHomeworkItem()">항목 추가</button>
+    <button class="settings-save-btn" style="width:100%; margin-top:8px;" onclick="addHomeworkItem()">항목 추가</button>
     <div class="sched-list" id="hwItemList" style="margin-top:12px;"></div>
   </div>
 
@@ -708,8 +701,8 @@
     <thead>
       <tr>
         <th style="width:22%">이름</th>
-        <th style="width:24%">출석</th>
-        <th style="width:24%">숙제 제출</th>
+        <th style="width:24%" id="rosterAttHeader">출석</th>
+        <th style="width:24%" id="rosterHwHeader">숙제 제출</th>
         <th>최근 14일</th>
         <th style="width:70px"></th>
       </tr>
@@ -775,17 +768,6 @@
       <button class="settings-save-btn" onclick="saveAccountSettings()">저장</button>
       <div class="save-msg" id="settingsSaveMsg"></div>
       <button class="settings-save-btn" style="background:transparent; color:var(--absent); border:1px solid var(--absent); margin-top:8px;" onclick="handleTeacherLogout()">로그아웃</button>
-    </div>
-
-    <div class="settings-card">
-      <h3>📊 월간 데이터 내보내기</h3>
-      <div class="settings-desc">선택한 달의 출결·숙제·일정·질문 데이터를 엑셀 파일로 내려받습니다.</div>
-      <div class="settings-field">
-        <label>내보낼 월</label>
-        <input id="exportMonthInput" type="month">
-      </div>
-      <button class="settings-save-btn" onclick="exportMonthlyExcel()">엑셀로 내보내기</button>
-      <div class="save-msg" id="exportSaveMsg"></div>
     </div>
 
     <div class="settings-card">
@@ -908,7 +890,7 @@
 
   <div id="qnaView" style="display:none;">
     <div class="back-link" onclick="goHome()">← 홈으로</div>
-    <div class="settings-desc" style="margin-bottom:14px;">학생·학부모가 남긴 질문에 답변을 남기면 해당 화면에 바로 표시됩니다.</div>
+    <div class="settings-desc" style="margin-bottom:14px;">학생이 남긴 질문에 답변을 남기면 그 학생 화면에 바로 표시됩니다.</div>
     <div id="qnaTeacherList"></div>
   </div>
 
@@ -991,7 +973,11 @@ try{
   auth = null;
 }
 
+// Firebase Authentication 로그인 방식을 여기서 정합니다.
+// - 원장님: 실제 이메일/비밀번호 로그인 (Firestore 규칙에서 "원장님인지" 구분하는 기준이 됩니다)
+// - 학생/학부모: 화면에는 안 보이지만 뒤에서 조용히 "익명 로그인"만 처리
 function teacherIdToEmail(id){
+  // Firebase Authentication은 이메일 형식이 필요해서, 아이디를 내부용 가짜 이메일로 바꿔줍니다.
   const safe = String(id).toLowerCase().replace(/[^a-z0-9._-]/g, '');
   return (safe || 'director') + '@innerleader-app.local';
 }
@@ -1042,6 +1028,9 @@ function lsList(prefix){
   }catch(e){ return null; }
 }
 
+// ---- 학생별 공개 데이터 (student_public 컬렉션) ----
+// 원장님 전용 데이터(innerleader_data)와 분리된, "그 학생 한 명"의 데이터만 담는 문서입니다.
+// 학생/학부모 링크는 이 컬렉션의 자기 학생 문서 하나만 읽어오며, 원장님 전용 데이터는 아예 요청하지 않습니다.
 const PUBLIC_COLLECTION = 'student_public';
 const LS_PUBLIC_PREFIX = 'innerleader_public__';
 
@@ -1079,6 +1068,10 @@ async function publicDocDelete(studentId){
   try{ localStorage.removeItem(LS_PUBLIC_PREFIX + studentId); return true; }catch(e){ return false; }
 }
 
+// 현재 메모리에 있는 데이터에서 특정 학생 한 명의 몫만 뽑아 "공개용 스냅샷"을 만듭니다.
+// (원장님 모드에서는 students 배열 전체를 순회해 모든 학생 몫을 만들고,
+//  학생/학부모 잠긴 모드에서는 students 배열에 이미 자기 자신 한 명만 들어있으므로
+//  결과적으로 자기 자신의 스냅샷만 다시 만들어 올리는 셈이 됩니다.)
 function buildStudentSnapshot(studentId){
   const student = students.find(s => s.id === studentId);
   if(!student) return null;
@@ -1183,93 +1176,123 @@ document.getElementById('todayLabel').textContent = todayLabelText;
 const wcDateEl = document.getElementById('wcDate');
 if(wcDateEl) wcDateEl.textContent = todayLabelText + ' · 원장님 환영합니다 👋';
 
-function shiftDateStr(dateStr, delta){
-  const dt = new Date(dateStr + 'T00:00:00');
-  dt.setDate(dt.getDate() + delta);
-  return dt.toISOString().slice(0,10);
+// ---- 숙제 날짜별 달력(달력에서 날짜를 체크하면 그날의 숙제 리스트/체크 상태를 보여줌) ----
+// 세 화면(teacher=관리, student=학생 전용 앱, parent=학부모 보기)에서 각자 자기 상태를 갖습니다.
+const hwCalState = (() => {
+  const t = new Date(todayKey + 'T00:00:00');
+  const base = () => ({ year: t.getFullYear(), month: t.getMonth(), date: todayKey });
+  return { teacher: base(), student: base(), parent: base() };
+})();
+function calDate(ctx){ return hwCalState[ctx].date; }
+function formatDateLabel(date){
+  const d = new Date(date + 'T00:00:00');
+  return (d.getMonth()+1) + '월 ' + d.getDate() + '일';
 }
-function fmtDateNavLabel(dateStr){
-  const dt = new Date(dateStr + 'T00:00:00');
-  const w = ['일','월','화','수','목','금','토'][dt.getDay()];
-  return `${dateStr.slice(5).replace('-', '.')} (${w})`;
+function calendarMarksInMonth(monthPrefix, markStudentId){
+  const marks = new Set();
+  homeworkItems.forEach(i => { if(i.date && i.date.indexOf(monthPrefix) === 0) marks.add(i.date); });
+  Object.keys(studentHwItems).forEach(k => {
+    const parts = k.split(':');
+    const sid = parts[0], d = parts[1];
+    if(!d || d.indexOf(monthPrefix) !== 0) return;
+    if(markStudentId && sid !== markStudentId) return;
+    if((studentHwItems[k] || []).length > 0) marks.add(d);
+  });
+  return marks;
 }
-function dateNavHtml(prefix, dateStr){
-  const isToday = dateStr === todayKey;
+function calendarHtml(ctx, markStudentId){
+  const st = hwCalState[ctx];
+  const year = st.year, month = st.month;
+  const monthPrefix = year + '-' + pad(month+1);
+  const marks = calendarMarksInMonth(monthPrefix, markStudentId);
+  const firstDow = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  const prevDays = new Date(year, month, 0).getDate();
+  const cells = [];
+  for(let i=0;i<firstDow;i++) cells.push({ dnum: prevDays - firstDow + 1 + i, other:true });
+  for(let d=1; d<=daysInMonth; d++) cells.push({ dnum:d, other:false, dateStr: monthPrefix + '-' + pad(d) });
+  let nextNum = 1;
+  while(cells.length % 7 !== 0) cells.push({ dnum: nextNum++, other:true });
+
+  const dowHtml = ['일','월','화','수','목','금','토'].map(d => `<div class="hw-cal-dow">${d}</div>`).join('');
+  const cellsHtml = cells.map(c => {
+    if(c.other) return `<div class="hw-cal-day other-month">${c.dnum}</div>`;
+    const cls = [c.dateStr === todayKey ? 'today' : '', c.dateStr === st.date ? 'selected' : ''].join(' ');
+    return `<div class="hw-cal-day ${cls}" onclick="hwCalSelect('${ctx}','${c.dateStr}')">${c.dnum}${marks.has(c.dateStr) ? '<span class="dot-mark"></span>' : ''}</div>`;
+  }).join('');
+
   return `
-    <div class="hw-datenav">
-      <button class="hw-datenav-arrow" onclick="${prefix}DateShift(-1)">‹</button>
-      <div class="hw-datenav-mid">
-        <div class="hw-datenav-label">${fmtDateNavLabel(dateStr)}</div>
-        ${isToday ? '<span class="hw-datenav-badge">오늘</span>' : ''}
+    <div class="hw-cal">
+      <div class="hw-cal-head">
+        <span class="hw-cal-nav" onclick="hwCalNav('${ctx}',-1)">‹</span>
+        <span class="hw-cal-title">${year}년 ${month+1}월</span>
+        <span class="hw-cal-nav" onclick="hwCalNav('${ctx}',1)">›</span>
       </div>
-      <button class="hw-datenav-arrow" onclick="${prefix}DateShift(1)" ${isToday ? 'disabled' : ''}>›</button>
-      ${!isToday ? `<button class="hw-datenav-todaybtn" onclick="${prefix}DateToday()">오늘로</button>` : ''}
+      <div class="hw-cal-grid">${dowHtml}${cellsHtml}</div>
+      <div class="hw-cal-foot">
+        <span>${formatDateLabel(st.date)}${st.date === todayKey ? ' (오늘)' : ''} 숙제 보기</span>
+        ${st.date !== todayKey ? `<span class="hw-cal-today-btn" onclick="hwCalToday('${ctx}')">오늘로</span>` : ''}
+      </div>
     </div>
   `;
 }
-
-let teacherHwDate = todayKey;
-let studentHwDate = todayKey;
-let parentHwDate = todayKey;
-
-window.teacherDateShift = function(delta){
-  const next = shiftDateStr(teacherHwDate, delta);
-  if(next > todayKey) return;
-  teacherHwDate = next;
-  render();
+function rerenderHwCal(ctx){
+  if(ctx === 'teacher'){ render(); }
+  else if(ctx === 'student'){
+    if(lockedStudentId && lockedRole === 'student') renderStudentViewForId(lockedStudentId);
+    else if(typeof window.renderStudentViewSelect === 'function') window.renderStudentViewSelect();
+  } else if(ctx === 'parent'){
+    if(lockedStudentId && lockedRole === 'parent') renderParentViewForId(lockedStudentId);
+    else if(typeof window.renderParentView === 'function') window.renderParentView();
+  }
+}
+window.hwCalNav = function(ctx, delta){
+  const st = hwCalState[ctx];
+  let m = st.month + delta, y = st.year;
+  if(m < 0){ m = 11; y--; } else if(m > 11){ m = 0; y++; }
+  st.month = m; st.year = y;
+  rerenderHwCal(ctx);
 };
-window.teacherDateToday = function(){ teacherHwDate = todayKey; render(); };
-
-window.studentDateShift = function(delta){
-  const next = shiftDateStr(studentHwDate, delta);
-  if(next > todayKey) return;
-  studentHwDate = next;
-  renderStudentViewForId(currentTimerStudentId);
+window.hwCalSelect = function(ctx, dateStr){
+  hwCalState[ctx].date = dateStr;
+  rerenderHwCal(ctx);
 };
-window.studentDateToday = function(){ studentHwDate = todayKey; renderStudentViewForId(currentTimerStudentId); };
-
-window.parentDateShift = function(delta){
-  const sel = document.getElementById('parentStudentSelect');
-  const studentId = sel ? (sel.value || students[0].id) : (students[0] && students[0].id);
-  const next = shiftDateStr(parentHwDate, delta);
-  if(next > todayKey) return;
-  parentHwDate = next;
-  if(studentId) renderParentViewForId(studentId);
-};
-window.parentDateToday = function(){
-  const sel = document.getElementById('parentStudentSelect');
-  const studentId = sel ? (sel.value || students[0].id) : (students[0] && students[0].id);
-  parentHwDate = todayKey;
-  if(studentId) renderParentViewForId(studentId);
+window.hwCalToday = function(ctx){
+  const t = new Date(todayKey + 'T00:00:00');
+  hwCalState[ctx] = { year: t.getFullYear(), month: t.getMonth(), date: todayKey };
+  rerenderHwCal(ctx);
 };
 
 const urlParams = new URLSearchParams(window.location.search);
 const lockedStudentId = urlParams.get('student');
 const lockedRole = urlParams.get('role') === 'student' ? 'student' : 'parent';
 
-let students = [];
-let records = {};
-let homeworkByDate = {};
-let studentHwItems = {};
-let teacherAuth = null;
-let notice = '';
-let schedule = [];
+let students = [];   // [{id, name}]
+let records = {};    // { "studentId:date": {att: 'good'|'warn'|'absent'|null, hw: 'good'|'warn'|'absent'|null} }
+let homeworkByDate = {}; // { date: text }
+let studentHwItems = {}; // { "studentId:date": [{id, text, done}] } — 학생이 직접 적은 오늘의 숙제 목록 (항목별 체크)
+let teacherAuth = null; // { id, pw } or null if not yet set up
+let notice = ''; // announcement text shown on home banner
+let schedule = []; // [{id, studentId:'all'|id, type:'exam'|'test'|'vacation'|'etc', date:'YYYY-MM-DD', title}]
 let selectedSchedType = 'exam';
-let studyTimeByDate = {};
-let progressByStudent = {};
-let testScores = [];
-let planEntries = [];
-let studentDDay = {};
-let defaultDDay = null;
-let parentVisible = {};
-let questions = []; // [{id, studentId, text, answer, date, answeredAt, askedBy:'student'|'parent'}]
-let homeworkItems = [];
-let homeworkItemChecks = {};
-let classes = [];
-let classOf = {};
-let classComments = [];
+let studyTimeByDate = {}; // { "studentId:date": totalSeconds }
+let progressByStudent = {}; // { studentId: text }
+let testScores = []; // [{id, studentId, title, score, maxScore, date}]
+let planEntries = []; // [{id, studentId, date:'YYYY-MM-DD', title, done}]
+let studentDDay = {}; // { studentId: {title, date} }
+let defaultDDay = null; // {title, date} or null
+let parentVisible = {}; // { studentId: boolean } - whether planner is shown to that student's parent
+let questions = []; // [{id, studentId, text, answer, date, answeredAt}]
+let homeworkItems = []; // [{id, date, text}]
+let homeworkItemChecks = {}; // { "studentId:itemId": true }
+let classes = []; // [{id, name}]
+let classOf = {}; // { studentId: classId }
+let classComments = []; // [{id, classId, text, date}]
 
 async function loadLockedStudentData(){
+  // 학생/학부모 공유 링크로 접속했을 때만 실행됩니다.
+  // 원장님 전용 데이터(innerleader_data)는 절대 요청하지 않고,
+  // 이 학생 한 명의 공개 스냅샷(student_public/{id})만 가져옵니다.
   const snap = await publicDocGet(lockedStudentId);
   if(!snap){
     students = [];
@@ -1294,7 +1317,7 @@ async function loadLockedStudentData(){
     classOf = snap.classId ? { [snap.id]: snap.classId } : {};
     classComments = snap.classComments || [];
   }
-  teacherAuth = null;
+  teacherAuth = null; // 학생/학부모 세션에서는 절대 채우지 않습니다.
 
   renderNoticeBanner();
   render();
@@ -1313,6 +1336,7 @@ async function loadAll(){
     return;
   }
 
+  // 원장님 데이터는 로그인 전에는 아예 요청하지 않습니다 (로그인 화면만 먼저 보여줍니다).
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('appShell').style.display = 'none';
   const idEl = document.getElementById('loginId');
@@ -1400,6 +1424,10 @@ async function loadTeacherData(){
     classComments = cc ? JSON.parse(cc.value) : [];
   }catch(e){ classComments = []; }
 
+  // 학생이 스스로 남긴 기록(숙제 체크, 공부 타이머, 질문)은
+  // student_public 문서에서 가져와 원장님 화면에 반영합니다.
+  // (학생/학부모는 innerleader_data에 쓸 수 없도록 막혀 있으므로,
+  //  자기 스스로 남긴 기록은 student_public에만 저장되어 있습니다.)
   for(const s of students){
     let pub = null;
     try{ pub = await publicDocGet(s.id); }catch(e){ pub = null; }
@@ -1419,12 +1447,12 @@ async function loadTeacherData(){
       pub.questions.forEach(pq => {
         const idx = questions.findIndex(x => x.id === pq.id);
         if(idx === -1) questions.push(pq);
-        else questions[idx] = pq;
+        else questions[idx] = pq; // 학생이 새로 남긴 질문 반영(답변은 원장님 쪽이 최신)
       });
     }
     if(pub.planEntries){
       planEntries = planEntries.filter(p => p.studentId !== s.id);
-      planEntries.push(...pub.planEntries);
+      planEntries.push(...pub.planEntries); // 그 학생의 계획은 공개 스냅샷을 최신 상태로 취급 (학생이 삭제한 것도 반영됨)
     }
   }
   updateQnaBadges();
@@ -1602,8 +1630,18 @@ function render(){
   updateHomeStats();
   renderHwItemList();
   renderHomeClassFrame();
-  const navEl = document.getElementById('teacherHwDateNav');
-  if(navEl) navEl.innerHTML = dateNavHtml('teacher', teacherHwDate);
+
+  const teacherDate = calDate('teacher');
+  const calEl = document.getElementById('teacherHwCal');
+  if(calEl) calEl.innerHTML = calendarHtml('teacher');
+  const hwCardLabelEl = document.getElementById('hwCardLabel');
+  if(hwCardLabelEl) hwCardLabelEl.textContent = teacherDate === todayKey ? '오늘의 숙제' : formatDateLabel(teacherDate) + ' 숙제';
+  const hwInputEl = document.getElementById('hwInput');
+  if(hwInputEl && document.activeElement !== hwInputEl) hwInputEl.value = homeworkByDate[teacherDate] || '';
+  const attHeaderEl = document.getElementById('rosterAttHeader');
+  if(attHeaderEl) attHeaderEl.textContent = teacherDate === todayKey ? '출석' : '출석 (' + formatDateLabel(teacherDate) + ')';
+  const hwHeaderEl = document.getElementById('rosterHwHeader');
+  if(hwHeaderEl) hwHeaderEl.textContent = teacherDate === todayKey ? '숙제 제출' : '숙제 제출 (' + formatDateLabel(teacherDate) + ')';
 
   if(students.length === 0){
     body.innerHTML = '<tr><td colspan="4"><div class="empty">아직 등록된 학생이 없습니다. 위 "+ 학생 추가" 버튼으로 시작하세요.</div></td></tr>';
@@ -1612,7 +1650,7 @@ function render(){
 
   const dates = last14Dates();
   body.innerHTML = students.map(st => {
-    const key = st.id + ':' + teacherHwDate;
+    const key = st.id + ':' + teacherDate;
     const rec = records[key] || {};
     const attPills = ['good','warn','absent'].map(v => {
       const label = v==='good' ? '출석' : v==='warn' ? '지각' : '결석';
@@ -1638,7 +1676,7 @@ function render(){
          </div>`
       : '';
 
-    const myItems = studentHwItemsForDate(st.id, teacherHwDate);
+    const myItems = studentHwItemsForDate(st.id, teacherDate);
     const myHwNote = myItems.length === 0 ? '' : `
       <div class="student-hw-note">
         ✍️ ${myItems.filter(i=>i.done).length}/${myItems.length} 완료 —
@@ -1659,7 +1697,7 @@ function render(){
 }
 
 window.setRecord = async function(studentId, field, value){
-  const key = studentId + ':' + teacherHwDate;
+  const key = studentId + ':' + calDate('teacher');
   if(!records[key]) records[key] = {};
   records[key][field] = records[key][field] === value ? null : value;
   await saveRecords(studentId);
@@ -1718,6 +1756,7 @@ document.getElementById('addStudentBtn').addEventListener('click', addStudent);
 document.getElementById('newName').addEventListener('keydown', e => { if(e.key === 'Enter') addStudent(); });
 
 function randomIdSuffix(){
+  // 링크에 들어가는 학생 ID를 추측하기 어렵게 무작위 문자열을 덧붙입니다.
   return Math.random().toString(36).slice(2, 10);
 }
 
@@ -1738,7 +1777,7 @@ async function addStudent(){
 
 let hwTimer;
 document.getElementById('hwInput').addEventListener('input', (e) => {
-  homeworkByDate[todayKey] = e.target.value;
+  homeworkByDate[calDate('teacher')] = e.target.value;
   clearTimeout(hwTimer);
   const msg = document.getElementById('hwSaveMsg');
   msg.textContent = '저장 중...';
@@ -1824,97 +1863,7 @@ window.saveAccountSettings = async function(){
   }
 };
 
-// ---- 월간 엑셀 내보내기 ----
-window.exportMonthlyExcel = async function(){
-  const monthInput = document.getElementById('exportMonthInput');
-  const msg = document.getElementById('exportSaveMsg');
-  let monthStr = monthInput.value;
-  if(!monthStr){ monthStr = todayKey.slice(0,7); monthInput.value = monthStr; }
-  const prefix = monthStr;
-
-  function classNameOf(sid){
-    const cid = classOf[sid];
-    const c = classes.find(c => c.id === cid);
-    return c ? c.name : '';
-  }
-
-  const attRows = [['날짜','학생명','반','출석','숙제상태']];
-  students.forEach(s => {
-    Object.keys(records).forEach(key => {
-      if(key.indexOf(s.id + ':') !== 0) return;
-      const date = key.slice(s.id.length + 1);
-      if(date.indexOf(prefix) !== 0) return;
-      const rec = records[key];
-      if(!rec.att && !rec.hw) return;
-      attRows.push([date, s.name, classNameOf(s.id), statusLabel(rec.att,'att'), statusLabel(rec.hw,'hw')]);
-    });
-  });
-
-  const hwRows = [['날짜','학생명','숙제 항목','완료여부']];
-  Object.keys(studentHwItems).forEach(key => {
-    const idx = key.lastIndexOf(':');
-    const sid = key.slice(0, idx);
-    const date = key.slice(idx + 1);
-    if(date.indexOf(prefix) !== 0) return;
-    const student = students.find(s => s.id === sid);
-    if(!student) return;
-    (studentHwItems[key] || []).forEach(item => {
-      hwRows.push([date, student.name, item.text, item.done ? '완료' : '미완료']);
-    });
-  });
-
-  const teacherHwRows = [['날짜','등록된 숙제 내용']];
-  Object.keys(homeworkByDate).forEach(date => {
-    if(date.indexOf(prefix) !== 0) return;
-    if(homeworkByDate[date]) teacherHwRows.push([date, homeworkByDate[date]]);
-  });
-
-  const schedRows = [['날짜','대상','종류','내용']];
-  schedule.forEach(ev => {
-    if(ev.date.indexOf(prefix) !== 0) return;
-    const who = ev.studentId === 'all' ? '전체 학생' : (students.find(s => s.id === ev.studentId)?.name || '알 수 없음');
-    schedRows.push([ev.date, who, schedTypeLabel(ev.type), ev.title]);
-  });
-
-  const qnaRows = [['날짜','학생명','질문자','질문','답변여부','답변내용']];
-  questions.forEach(q => {
-    if(q.date.indexOf(prefix) !== 0) return;
-    const student = students.find(s => s.id === q.studentId);
-    qnaRows.push([q.date, student ? student.name : '알 수 없음', q.askedBy === 'parent' ? '학부모' : '학생', q.text, q.answer ? '답변완료' : '미답변', q.answer || '']);
-  });
-
-  const summaryRows = [['학생명','반','출석일수','결석일수','지각일수','숙제완료일수','숙제부분/미완료일수','이번달 질문수','미답변 질문수']];
-  students.forEach(s => {
-    let att=0, absent=0, warn=0, hwGood=0, hwBad=0;
-    Object.keys(records).forEach(key => {
-      if(key.indexOf(s.id + ':') !== 0) return;
-      const date = key.slice(s.id.length + 1);
-      if(date.indexOf(prefix) !== 0) return;
-      const r = records[key];
-      if(r.att === 'good') att++;
-      else if(r.att === 'absent') absent++;
-      else if(r.att === 'warn') warn++;
-      if(r.hw === 'good') hwGood++;
-      else if(r.hw) hwBad++;
-    });
-    const myQ = questions.filter(q => q.studentId === s.id && q.date.indexOf(prefix) === 0);
-    summaryRows.push([s.name, classNameOf(s.id), att, absent, warn, hwGood, hwBad, myQ.length, myQ.filter(q => !q.answer).length]);
-  });
-
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), '월간요약');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(attRows), '출결');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(hwRows), '숙제(학생작성)');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(teacherHwRows), '숙제(선생님등록)');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(schedRows), '일정');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(qnaRows), '질문Q&A');
-  XLSX.writeFile(wb, `이너리더_${monthStr}_리포트.xlsx`);
-
-  msg.style.color = 'var(--good)';
-  msg.textContent = '다운로드 완료 ✓';
-  setTimeout(() => msg.textContent = '', 2000);
-};
-
+// ---- Schedule / calendar ----
 function schedTypeLabel(type){
   return type === 'exam' ? '시험' : type === 'test' ? '테스트' : type === 'vacation' ? '방학' : '기타';
 }
@@ -2022,6 +1971,7 @@ function studentScheduleHtml(studentId){
   }).join('') + '</div>';
 }
 
+// ---- Study time (순공시간) ----
 async function saveStudyTime(studentId){
   try{
     const r = await window.storage.set('studyTime', JSON.stringify(studyTimeByDate), true);
@@ -2043,11 +1993,12 @@ function studentStudyTimeSummary(studentId){
   dates.forEach((d, i) => {
     const secs = studyTimeByDate[studentId + ':' + d] || 0;
     last14 += secs;
-    if(i >= 7) last7 += secs;
+    if(i >= 7) last7 += secs; // last 7 entries in a 14-day array (index 7~13) are the most recent 7 days
   });
   return { last7, last14 };
 }
 
+// ---- Progress notes (진도) ----
 async function saveProgress(studentId){
   try{
     const r = await window.storage.set('progress', JSON.stringify(progressByStudent), true);
@@ -2056,6 +2007,7 @@ async function saveProgress(studentId){
   if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
 
+// ---- Test scores (시험 점수) ----
 async function saveTestScores(studentId){
   try{
     const r = await window.storage.set('testScores', JSON.stringify(testScores), true);
@@ -2191,6 +2143,7 @@ function parentReportHtml(studentId){
   `;
 }
 
+// ---- Student planner ----
 async function saveDefaultDday(){
   const titleEl = document.getElementById('defaultDdayTitle');
   const dateEl = document.getElementById('defaultDdayDate');
@@ -2236,7 +2189,7 @@ async function saveParentVisible(studentId){
 
 function getWeekRange(){
   const now = new Date();
-  const day = now.getDay();
+  const day = now.getDay(); // 0=Sun..6=Sat
   const diffToMon = day === 0 ? -6 : 1 - day;
   const mon = new Date(now);
   mon.setDate(now.getDate() + diffToMon);
@@ -2442,6 +2395,7 @@ function parentPlannerHtml(studentId){
   `;
 }
 
+// ---- Q&A ----
 async function saveQuestions(studentId){
   try{
     const r = await window.storage.set('questions', JSON.stringify(questions), true);
@@ -2467,22 +2421,11 @@ window.submitStudentQuestion = async function(studentId){
   const input = document.getElementById('studentQuestionInput');
   const text = input.value.trim();
   if(!text) return;
-  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null, askedBy: 'student' });
+  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null });
   await saveQuestions(studentId);
   updateQnaBadges();
   input.value = '';
   renderStudentViewForId(studentId);
-};
-
-window.submitParentQuestion = async function(studentId){
-  const input = document.getElementById('parentQuestionInput');
-  const text = input.value.trim();
-  if(!text) return;
-  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null, askedBy: 'parent' });
-  await saveQuestions(studentId);
-  updateQnaBadges();
-  input.value = '';
-  renderParentViewForId(studentId);
 };
 
 function studentQnaListHtml(studentId){
@@ -2490,7 +2433,7 @@ function studentQnaListHtml(studentId){
   if(mine.length === 0) return '<div class="sched-empty">아직 남긴 질문이 없습니다.</div>';
   return mine.map(q => `
     <div class="qna-item">
-      <div class="qna-top"><span class="qna-date">${q.date} · ${q.askedBy === 'parent' ? '👨‍👩‍👧 학부모 질문' : '🎓 학생 질문'}</span></div>
+      <div class="qna-top"><span class="qna-date">${q.date}</span></div>
       <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
       <div class="qna-question">${q.text}</div>
       ${q.answer ? `<div class="qna-answer-display">👩‍🏫 ${q.answer}</div>` : ''}
@@ -2506,13 +2449,12 @@ window.renderQnaTeacherList = function(){
     return;
   }
   const sorted = [...questions].sort((a,b) => {
-    if(!!a.answer !== !!b.answer) return a.answer ? 1 : -1;
+    if(!!a.answer !== !!b.answer) return a.answer ? 1 : -1; // unanswered first
     return b.date.localeCompare(a.date);
   });
   list.innerHTML = sorted.map(q => {
     const student = students.find(s => s.id === q.studentId);
     const who = student ? student.name : '알 수 없음';
-    const askerTag = q.askedBy === 'parent' ? '👨‍👩‍👧 학부모' : '🎓 학생';
     const answerBlock = q.answer
       ? `<div class="qna-answer-display">👩‍🏫 ${q.answer}</div>
          <span class="qna-edit-link" onclick="startEditAnswer('${q.id}')">답변 수정</span>`
@@ -2523,7 +2465,7 @@ window.renderQnaTeacherList = function(){
     return `
       <div class="qna-item">
         <div class="qna-top">
-          <span class="qna-student">${who} <span style="font-weight:400; color:var(--ink-soft); font-size:11px;">(${askerTag})</span></span>
+          <span class="qna-student">${who}</span>
           <span class="qna-date">${q.date}</span>
         </div>
         <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
@@ -2561,6 +2503,7 @@ window.answerQuestion = async function(id){
   window.renderQnaTeacherList();
 };
 
+// ---- Homework checklist (과제별 체크) ----
 async function saveHomeworkItems(){
   try{
     const r = await window.storage.set('homeworkItems', JSON.stringify(homeworkItems), true);
@@ -2575,9 +2518,6 @@ async function saveHomeworkItemChecks(studentId){
   }catch(e){ console.error('homeworkItemChecks 저장 오류:', e); }
   if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
-function todaysHomeworkItems(){
-  return homeworkItemsForDate(todayKey);
-}
 function homeworkItemsForDate(date){
   return homeworkItems.filter(i => i.date === date);
 }
@@ -2586,7 +2526,7 @@ window.addHomeworkItem = async function(){
   const input = document.getElementById('hwItemInput');
   const text = input.value.trim();
   if(!text) return;
-  homeworkItems.push({ id: 'h' + Date.now(), date: todayKey, text });
+  homeworkItems.push({ id: 'h' + Date.now(), date: calDate('teacher'), text });
   await saveHomeworkItems();
   input.value = '';
   renderHwItemList();
@@ -2601,17 +2541,12 @@ window.deleteHomeworkItem = async function(id){
 function renderHwItemList(){
   const list = document.getElementById('hwItemList');
   if(!list) return;
-  const isToday = teacherHwDate === todayKey;
+  const date = calDate('teacher');
   const titleEl = document.getElementById('hwItemListTitle');
-  const addRowEl = document.getElementById('hwItemAddRow');
-  const addBtnEl = document.getElementById('hwItemAddBtn');
-  if(titleEl) titleEl.textContent = isToday ? '✅ 오늘의 숙제 체크리스트' : `✅ ${fmtDateNavLabel(teacherHwDate)} 숙제 체크리스트`;
-  if(addRowEl) addRowEl.style.display = isToday ? '' : 'none';
-  if(addBtnEl) addBtnEl.style.display = isToday ? '' : 'none';
-
-  const items = homeworkItemsForDate(teacherHwDate);
+  if(titleEl) titleEl.textContent = date === todayKey ? '✅ 오늘의 숙제 체크리스트' : `✅ ${formatDateLabel(date)} 숙제 체크리스트`;
+  const items = homeworkItemsForDate(date);
   if(items.length === 0){
-    list.innerHTML = `<div class="sched-empty">${isToday ? '오늘' : '이 날짜에'} 등록된 숙제 항목이 없습니다.</div>`;
+    list.innerHTML = `<div class="sched-empty">${date === todayKey ? '오늘' : formatDateLabel(date)} 등록된 숙제 항목이 없습니다.</div>`;
     return;
   }
   list.innerHTML = items.map(item => {
@@ -2619,14 +2554,15 @@ function renderHwItemList(){
     return `<div class="plan-item">
       <div class="plan-title">${item.text}</div>
       <div class="qna-date">${doneCount}/${students.length}명 완료</div>
-      ${isToday ? `<div class="sched-del" onclick="deleteHomeworkItem('${item.id}')">삭제</div>` : ''}
+      <div class="sched-del" onclick="deleteHomeworkItem('${item.id}')">삭제</div>
     </div>`;
   }).join('');
 }
 
 function recomputeHwStatus(studentId){
-  const items = todaysHomeworkItems();
-  if(items.length === 0) return;
+  // 학생이 오늘 체크박스를 직접 누를 때만 호출되므로 항상 '오늘' 기준으로 출석부 상태를 갱신합니다.
+  const items = homeworkItemsForDate(todayKey);
+  if(items.length === 0) return; // no items today: leave manual status untouched
   const doneCount = items.filter(i => homeworkItemChecks[studentId + ':' + i.id]).length;
   const key = studentId + ':' + todayKey;
   if(!records[key]) records[key] = {};
@@ -2644,15 +2580,14 @@ window.toggleHwItemCheck = async function(studentId, itemId){
   renderStudentViewForId(studentId);
 };
 
-function hwChecklistStudentHtml(studentId, date){
-  date = date || todayKey;
+// date===오늘일 때만 체크 가능(editable). 다른 날짜는 학생/학부모/관리 모두 읽기 전용으로 봅니다.
+function hwChecklistHtml(studentId, date, editable){
   const items = homeworkItemsForDate(date);
   if(items.length === 0) return '';
-  const editable = date === todayKey;
-  const label = editable ? '✅ 오늘 숙제 체크리스트' : `✅ ${fmtDateNavLabel(date)} 숙제 체크리스트`;
+  const title = date === todayKey ? '✅ 오늘 숙제 체크리스트' : `✅ ${formatDateLabel(date)} 숙제 체크리스트`;
   return `
     <div class="hw-card">
-      <label>${label}</label>
+      <label>${title}</label>
       <div class="sched-list" style="margin-top:8px;">
         ${items.map(item => {
           const checked = !!homeworkItemChecks[studentId + ':' + item.id];
@@ -2668,40 +2603,17 @@ function hwChecklistStudentHtml(studentId, date){
   `;
 }
 
-function hwChecklistParentHtml(studentId, date){
-  date = date || todayKey;
-  const items = homeworkItemsForDate(date);
-  if(items.length === 0) return '';
-  const label = date === todayKey ? '✅ 오늘 숙제 체크리스트' : `✅ ${fmtDateNavLabel(date)} 숙제 체크리스트`;
-  return `
-    <div class="settings-field" style="margin-top:14px; margin-bottom:0;">
-      <label>${label}</label>
-      <div class="sched-list">
-        ${items.map(item => {
-          const checked = !!homeworkItemChecks[studentId + ':' + item.id];
-          return `<div class="plan-item ${checked ? 'done' : ''}">
-            <span style="width:19px; flex-shrink:0; text-align:center;">${checked ? '✅' : '⬜'}</span>
-            <div class="plan-title">${item.text}</div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
-  `;
-}
-
-function todaysStudentHwItems(studentId){
-  return studentHwItemsForDate(studentId, todayKey);
-}
+// ---- 학생이 직접 적는 숙제 목록 (학생/원장님/학부모 모두에게 보임, 날짜별) ----
 function studentHwItemsForDate(studentId, date){
   return studentHwItems[studentId + ':' + date] || [];
 }
 
-function recomputeStudentHwStatus(studentId, date){
-  date = date || todayKey;
-  const items = studentHwItemsForDate(studentId, date);
-  if(items.length === 0) return;
+function recomputeStudentHwStatus(studentId){
+  // 학생이 오늘 항목을 직접 추가/체크할 때만 호출되므로 항상 '오늘' 기준입니다.
+  const items = studentHwItemsForDate(studentId, todayKey);
+  if(items.length === 0) return; // 학생이 적은 항목이 없으면 기존 상태를 건드리지 않습니다
   const doneCount = items.filter(i => i.done).length;
-  const key = studentId + ':' + date;
+  const key = studentId + ':' + todayKey;
   if(!records[key]) records[key] = {};
   records[key].hw = doneCount === items.length ? 'good' : doneCount > 0 ? 'warn' : null;
 }
@@ -2719,42 +2631,42 @@ window.addStudentHwItem = async function(studentId){
   renderStudentViewForId(studentId);
 };
 
-window.toggleStudentHwItem = async function(studentId, itemId, date){
-  date = date || todayKey;
-  const key = studentId + ':' + date;
+window.toggleStudentHwItem = async function(studentId, itemId){
+  const key = studentId + ':' + todayKey;
   const items = studentHwItems[key] || [];
   const item = items.find(i => i.id === itemId);
   if(!item) return;
   item.done = !item.done;
   await saveStudentHwItems(studentId);
-  recomputeStudentHwStatus(studentId, date);
+  recomputeStudentHwStatus(studentId);
   await saveRecords(studentId);
   renderStudentViewForId(studentId);
 };
 
-window.deleteStudentHwItem = async function(studentId, itemId, date){
-  date = date || todayKey;
-  const key = studentId + ':' + date;
+window.deleteStudentHwItem = async function(studentId, itemId){
+  const key = studentId + ':' + todayKey;
   studentHwItems[key] = (studentHwItems[key] || []).filter(i => i.id !== itemId);
   await saveStudentHwItems(studentId);
-  recomputeStudentHwStatus(studentId, date);
+  recomputeStudentHwStatus(studentId);
   await saveRecords(studentId);
   renderStudentViewForId(studentId);
 };
 
-function studentHwListHtml(studentId, date, editable){
+// editableRequested=true: 체크박스+삭제+추가 입력창 (학생 화면). false: 읽기 전용 (원장님/학부모 화면).
+// 실제 편집은 date가 오늘일 때만 허용되고, 지난/다음 날짜는 항상 읽기 전용으로 보여줍니다.
+function studentHwListHtml(studentId, date, editableRequested){
+  const editable = editableRequested && date === todayKey;
   const items = studentHwItemsForDate(studentId, date);
-  const isToday = date === todayKey;
   const listHtml = items.length === 0
-    ? `<div class="sched-empty">${editable ? '아직 추가한 숙제가 없습니다. 아래에서 추가해보세요.' : isToday ? '학생이 아직 적은 숙제가 없습니다.' : '이 날짜에 학생이 적은 숙제가 없습니다.'}</div>`
+    ? `<div class="sched-empty">${editable ? '아직 추가한 숙제가 없습니다. 아래에서 추가해보세요.' : (date===todayKey ? '학생이 아직 적은 숙제가 없습니다.' : formatDateLabel(date) + '에 적은 숙제가 없습니다.')}</div>`
     : items.map(item => {
         const checked = !!item.done;
         return `<div class="plan-item ${checked ? 'done' : ''}">
           ${editable
-            ? `<input type="checkbox" class="plan-check" ${checked ? 'checked' : ''} onchange="toggleStudentHwItem('${studentId}','${item.id}','${date}')">`
+            ? `<input type="checkbox" class="plan-check" ${checked ? 'checked' : ''} onchange="toggleStudentHwItem('${studentId}','${item.id}')">`
             : `<span style="width:19px; flex-shrink:0; text-align:center;">${checked ? '✅' : '⬜'}</span>`}
           <div class="plan-title">${escapeHtml(item.text)}</div>
-          ${editable ? `<div class="sched-del" onclick="deleteStudentHwItem('${studentId}','${item.id}','${date}')">삭제</div>` : ''}
+          ${editable ? `<div class="sched-del" onclick="deleteStudentHwItem('${studentId}','${item.id}')">삭제</div>` : ''}
         </div>`;
       }).join('');
 
@@ -2768,6 +2680,7 @@ function studentHwListHtml(studentId, date, editable){
   return `<div class="sched-list">${listHtml}</div>${addRow}`;
 }
 
+// ---- Class management (반 관리) ----
 async function saveClasses(){
   try{
     const r = await window.storage.set('classes', JSON.stringify(classes), true);
@@ -3022,18 +2935,14 @@ function setMode(mode){
   if(mode === 'teacher'){
     teacherView.style.display = '';
     title.textContent = '출결부 · 숙제 체크';
-    teacherHwDate = todayKey;
-    render();
   } else if(mode === 'parent'){
     parentView.style.display = '';
     title.textContent = '우리 아이 학습 현황';
-    parentHwDate = todayKey;
     populateParentSelect();
     renderParentView();
   } else if(mode === 'student'){
     studentView.style.display = '';
     title.textContent = '학생 전용 · 공부 앱';
-    studentHwDate = todayKey;
     populateStudentViewSelect();
     renderStudentViewSelect();
   } else if(mode === 'settings'){
@@ -3114,6 +3023,10 @@ window.handleTeacherLogin = async function(){
     idEl.value = ''; pwEl.value = '';
     await enterApp();
   }catch(err){
+    // 최신 Firebase SDK는 "계정 없음"과 "비밀번호 틀림"을 구분하지 않고
+    // 둘 다 auth/invalid-credential로 반환하므로, 두 경우 모두 일단
+    // 계정 생성을 시도해봅니다. 이미 존재하는 계정이면 아래에서
+    // auth/email-already-in-use로 걸러져 "비밀번호가 틀렸다"고 정확히 안내됩니다.
     if(err && (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential')){
       try{
         await auth.createUserWithEmailAndPassword(email, pw);
@@ -3184,6 +3097,7 @@ function renderParentViewForId(studentId){
   if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
   const todayRec = records[studentId + ':' + todayKey] || {};
+  const pDate = calDate('parent');
   const dates = last14Dates();
   let presentCount = 0, hwGoodCount = 0, checkedDays = 0;
   dates.forEach(d => {
@@ -3239,26 +3153,21 @@ function renderParentViewForId(studentId){
       </div>
     </div>
 
+    <div class="settings-card">
+      <h3 style="margin:0 0 4px;">📖 날짜별 숙제 확인</h3>
+      <div class="settings-desc">달력에서 날짜를 선택하면 그날의 숙제 내용과 체크 현황을 볼 수 있어요.</div>
+      <div style="margin-top:10px;">${calendarHtml('parent', studentId)}</div>
+    </div>
+
     <div class="hw-card">
-      <label>📅 숙제 확인 날짜</label>
-      <div style="margin-top:8px;">${dateNavHtml('parent', parentHwDate)}</div>
-      <div style="font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-top:14px; margin-bottom:8px;">📋 선생님이 등록한 숙제</div>
-      <div class="hw-text-display">${homeworkByDate[parentHwDate] ? homeworkByDate[parentHwDate] : '등록된 숙제가 없습니다.'}</div>
-      <div style="font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-top:14px; margin-bottom:8px;">✍️ 우리 아이가 적은 숙제</div>
-      <div style="margin-top:8px;">${studentHwListHtml(studentId, parentHwDate, false)}</div>
-      ${hwChecklistParentHtml(studentId, parentHwDate)}
+      <label>${pDate === todayKey ? '오늘의 숙제 내용' : formatDateLabel(pDate) + ' 숙제 내용'}</label>
+      <div class="hw-text-display">${homeworkByDate[pDate] ? homeworkByDate[pDate] : '선생님이 등록한 숙제가 없습니다.'}</div>
+      <div style="font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-top:14px; margin-bottom:8px;">✍️ 우리 아이가 적은 ${pDate === todayKey ? '오늘의' : formatDateLabel(pDate)} 숙제</div>
+      <div style="margin-top:8px;">${studentHwListHtml(studentId, pDate, false)}</div>
+      ${hwChecklistHtml(studentId, pDate, false)}
     </div>
 
     ${classCommentsForStudentHtml(studentId)}
-
-    <div class="hw-card">
-      <label>💬 선생님께 질문하기</label>
-      <div class="qna-ask-row" style="margin-top:8px;">
-        <textarea id="parentQuestionInput" placeholder="선생님께 궁금한 점을 남겨보세요."></textarea>
-        <button class="qna-answer-btn" onclick="submitParentQuestion('${studentId}')">등록</button>
-      </div>
-      <div style="margin-top:12px;">${studentQnaListHtml(studentId)}</div>
-    </div>
 
     <div class="hw-card">
       <label>최근 14일 출석 기록</label>
@@ -3267,6 +3176,7 @@ function renderParentViewForId(studentId){
   `;
 };
 
+// ---- Student View (direct access) ----
 function populateStudentViewSelect(){
   const sel = document.getElementById('studentViewSelect');
   if(!sel) return;
@@ -3286,6 +3196,7 @@ window.renderStudentViewSelect = function(){
   renderStudentViewForId(studentId);
 };
 
+// ---- Student View ----
 let timerInterval = null;
 let timerSeconds = 0;
 let timerRunning = false;
@@ -3298,11 +3209,11 @@ function renderStudentViewForId(studentId){
   const student = students.find(s => s.id === studentId);
   if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
-  const isToday = studentHwDate === todayKey;
-  const dateRec = records[studentId + ':' + studentHwDate] || {};
-  const assignedHwText = homeworkByDate[studentHwDate] || '';
-  const hwState = dateRec.hw || null;
-  const myItems = studentHwItemsForDate(studentId, studentHwDate);
+  const todayRec = records[studentId + ':' + todayKey] || {};
+  const sDate = calDate('student');
+  const assignedHwText = homeworkByDate[sDate] || '';
+  const hwState = todayRec.hw || null;
+  const myItems = studentHwItemsForDate(studentId, sDate);
 
   const hwBtns = [
     { v:'good', label:'✅ 완료했어요' },
@@ -3312,28 +3223,25 @@ function renderStudentViewForId(studentId){
 
   summary.innerHTML = `
     <div class="hw-card">
-      <label>📅 숙제 확인 날짜</label>
-      <div style="margin-top:8px;">${dateNavHtml('student', studentHwDate)}</div>
+      <label>📅 날짜별 숙제 보기</label>
+      <div class="settings-desc">달력에서 날짜를 선택하면 그날의 숙제 목록과 체크 현황을 볼 수 있어요. (수정은 오늘 날짜만 가능해요)</div>
+      <div style="margin-top:10px;">${calendarHtml('student', studentId)}</div>
     </div>
 
     <div class="student-hw-card">
       ${assignedHwText ? `
-        <div class="hw-label">📋 선생님이 등록한 숙제</div>
+        <div class="hw-label">📋 선생님이 등록한 ${sDate === todayKey ? '숙제' : formatDateLabel(sDate) + ' 숙제'}</div>
         <div class="hw-content" style="margin-bottom:14px;">${assignedHwText}</div>
       ` : ''}
-      <div class="hw-label">✍️ ${isToday ? '오늘 내 숙제 목록' : fmtDateNavLabel(studentHwDate) + ' 내 숙제 목록'}</div>
-      <div style="margin-top:8px;">${studentHwListHtml(studentId, studentHwDate, isToday)}</div>
-      ${myItems.length === 0 && isToday ? `
+      <div class="hw-label">✍️ ${sDate === todayKey ? '오늘 내' : formatDateLabel(sDate)} 숙제 목록</div>
+      <div style="margin-top:8px;">${studentHwListHtml(studentId, sDate, true)}</div>
+      ${sDate === todayKey && myItems.length === 0 ? `
         <div class="hw-label" style="margin-top:14px;">내 숙제 상태</div>
         <div class="hw-self-btns">${hwBtns}</div>
       ` : ''}
-      ${!isToday && hwState ? `
-        <div class="hw-label" style="margin-top:14px;">그날 내 숙제 상태</div>
-        <span class="badge ${statusClass(hwState)}">${statusLabel(hwState,'hw')}</span>
-      ` : ''}
     </div>
 
-    ${hwChecklistStudentHtml(studentId, studentHwDate)}
+    ${hwChecklistHtml(studentId, sDate, sDate === todayKey)}
 
     <div class="hw-card">
       <label>📅 다가오는 일정</label>
