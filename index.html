@@ -1109,7 +1109,8 @@ function buildStudentSnapshot(studentId){
     progress: progressByStudent[studentId] || '',
     testScores: (testScores || []).filter(t => t.studentId === studentId),
     planEntries: (planEntries || []).filter(p => p.studentId === studentId),
-    dday: studentDDay[studentId] || defaultDDay || null,
+    ddayList: studentDDay[studentId] || [],
+    defaultDDay: defaultDDay || null,
     parentVisible: !!parentVisible[studentId],
     questions: (questions || []).filter(q => q.studentId === studentId),
     classComments: cid ? (classComments || []).filter(c => c.classId === cid) : [],
@@ -1193,7 +1194,7 @@ let studyTimeByDate = {}; // { "studentId:date": totalSeconds }
 let progressByStudent = {}; // { studentId: text }
 let testScores = []; // [{id, studentId, title, score, maxScore, date}]
 let planEntries = []; // [{id, studentId, date:'YYYY-MM-DD', title, done}]
-let studentDDay = {}; // { studentId: {title, date} }
+let studentDDay = {}; // { studentId: [{id, title, date}, ...] } — 학생별 D-Day 목록 (여러 개, 학생/원장님이 추가·삭제)
 let defaultDDay = null; // {title, date} or null
 let parentVisible = {}; // { studentId: boolean } - whether planner is shown to that student's parent
 let questions = []; // [{id, studentId, text, answer, date, answeredAt}]
@@ -1221,8 +1222,8 @@ async function loadLockedStudentData(){
     progressByStudent = snap.progress ? { [snap.id]: snap.progress } : {};
     testScores = snap.testScores || [];
     planEntries = snap.planEntries || [];
-    studentDDay = snap.dday ? { [snap.id]: snap.dday } : {};
-    defaultDDay = null;
+    studentDDay = { [snap.id]: snap.ddayList || [] };
+    defaultDDay = snap.defaultDDay || null;
     parentVisible = { [snap.id]: !!snap.parentVisible };
     questions = snap.questions || [];
     homeworkItems = snap.homeworkItems || [];
@@ -1951,28 +1952,14 @@ function studentCalDayPanelHtml(studentId){
   const isToday = dateStr === todayKey;
   const md = dateStr.slice(5).replace('-', '.');
 
-  const evs = schedule.filter(ev => (ev.studentId === studentId || ev.studentId === 'all') && ev.date === dateStr);
-  const schedHtml = evs.length === 0
-    ? '<div class="sched-empty">이 날짜에 등록된 일정이 없습니다.</div>'
-    : '<div class="sched-list">' + evs.map(ev => `<div class="sched-item">
-        <div class="sched-body">
-          <div class="sched-title">${escapeHtml(ev.title)}</div>
-          <div class="sched-meta"><span class="sched-badge ${ev.type}">${schedTypeLabel(ev.type)}</span>${ev.studentId === 'all' ? '전체 학생' : ''}</div>
-        </div>
-      </div>`).join('') + '</div>';
-
   const assignedHwText = homeworkByDate[dateStr] || '';
   const teacherHwHtml = assignedHwText
-    ? `<div class="hw-label" style="margin-top:14px;">📋 선생님이 등록한 숙제</div><div class="hw-content" style="margin-top:6px;">${escapeHtml(assignedHwText)}</div>`
+    ? `<div class="hw-label">📋 선생님이 등록한 숙제</div><div class="hw-content" style="margin-top:6px; margin-bottom:14px;">${escapeHtml(assignedHwText)}</div>`
     : '';
 
   return `
-    <div class="hw-card">
-      <label>🗓️ ${md} 일정${isToday ? ' (오늘)' : ''}</label>
-      <div style="margin-top:8px;">${schedHtml}</div>
-      ${teacherHwHtml}
-    </div>
     <div class="student-hw-card">
+      ${teacherHwHtml}
       <div class="hw-label">✍️ ${md} 숙제 목록${!isToday ? ' (읽기 전용)' : ''}</div>
       <div style="margin-top:8px;">${studentHwListHtml(studentId, isToday, dateStr)}</div>
     </div>
@@ -2220,6 +2207,53 @@ function ddayText(dday){
   return `${label} · ${dday.title} (${dday.date})`;
 }
 
+// 학생별 D-Day 목록(여러 개) 렌더링. editable=true면 항목별 삭제 버튼 표시.
+function ddayListHtml(studentId, list, editable){
+  const effective = (list && list.length > 0) ? list : (defaultDDay ? [{ id: 'default', title: defaultDDay.title, date: defaultDDay.date }] : []);
+  if(effective.length === 0){
+    return '<div class="sched-empty">등록된 D-Day가 없습니다.</div>';
+  }
+  const sorted = [...effective].sort((a,b) => a.date.localeCompare(b.date));
+  return '<div class="sched-list">' + sorted.map(d => {
+    const label = ddayText(d);
+    const canDelete = editable && d.id && d.id !== 'default';
+    return `<div class="sched-item">
+      <div class="sched-body">
+        <div class="sched-title">${escapeHtml(label)}</div>
+      </div>
+      ${canDelete ? `<div class="sched-del" onclick="deleteStudentDday('${studentId}','${d.id}')">삭제</div>` : ''}
+    </div>`;
+  }).join('') + '</div>';
+}
+
+window.addStudentDday = async function(studentId){
+  const titleEl = document.getElementById('ddayTitle_' + studentId);
+  const dateEl = document.getElementById('ddayDate_' + studentId);
+  if(!titleEl || !dateEl) return;
+  const title = titleEl.value.trim();
+  const date = dateEl.value;
+  if(!title || !date) return;
+  if(!studentDDay[studentId]) studentDDay[studentId] = [];
+  studentDDay[studentId].push({ id: 'dd' + Date.now(), title, date });
+  await saveStudentDDay(studentId);
+  titleEl.value = '';
+  dateEl.value = '';
+  refreshStudentUI(studentId);
+};
+
+window.deleteStudentDday = async function(studentId, id){
+  if(!studentDDay[studentId]) return;
+  studentDDay[studentId] = studentDDay[studentId].filter(d => d.id !== id);
+  await saveStudentDDay(studentId);
+  refreshStudentUI(studentId);
+};
+
+// 학생 전용 앱과 원장님 학생 플래너 화면 둘 다에서 호출될 수 있으므로, 열려 있는 화면을 다시 그려줍니다.
+function refreshStudentUI(studentId){
+  try{ renderStudentViewForId(studentId); }catch(e){}
+  if(document.getElementById('plannerContent')) renderPlannerForStudent(studentId);
+}
+
 function populatePlannerStudentSelect(){
   const sel = document.getElementById('plannerStudentSelect');
   if(!sel) return;
@@ -2251,9 +2285,7 @@ function renderPlannerForStudent(studentId){
   const todayDone = todayPlans.filter(p => p.done).length;
 
   const isVisible = !!parentVisible[studentId];
-  const dday = studentDDay[studentId];
-  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
-  const ddayLine = ddayText(effectiveDday);
+  const ddayList = studentDDay[studentId] || [];
 
   const weekDates = getWeekRange();
   const weekPlans = planEntries
@@ -2287,8 +2319,21 @@ function renderPlannerForStudent(studentId){
 
     <div class="settings-card">
       <h3>📆 학생 D-Day</h3>
-      <div class="settings-desc">학생이 학생 전용 앱에서 직접 설정합니다. 여기서는 확인만 할 수 있어요.</div>
-      ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : '<div class="sched-empty">아직 학생이 D-Day를 설정하지 않았습니다.</div>'}
+      <div class="settings-desc">학생과 원장님이 함께 여러 개 등록·삭제할 수 있어요.</div>
+      <div style="margin-top:8px;">${ddayListHtml(studentId, ddayList, true)}</div>
+      <div class="settings-field" style="margin-top:14px;">
+        <input id="ddayTitle_${studentId}" type="text" placeholder="예: 1학기 중간고사">
+      </div>
+      <div class="settings-field">
+        <input id="ddayDate_${studentId}" type="date">
+      </div>
+      <button class="settings-save-btn" style="width:100%; background:var(--good); text-align:center;" onclick="addStudentDday('${studentId}')">D-Day 추가</button>
+    </div>
+
+    <div class="settings-card">
+      <h3>✍️ 오늘 숙제 목록</h3>
+      <div class="settings-desc">학생과 원장님이 함께 적고 체크할 수 있어요.</div>
+      <div style="margin-top:8px;">${studentHwListHtml(studentId, true, todayKey)}</div>
     </div>
 
     <div class="settings-card">
@@ -2354,9 +2399,7 @@ function parentPlannerHtml(studentId){
   const todaySecs = studyTimeByDate[studentId + ':' + todayKey] || 0;
   const todayPlans = planEntries.filter(p => p.studentId === studentId && p.date === todayKey);
   const todayDone = todayPlans.filter(p => p.done).length;
-  const dday = studentDDay[studentId];
-  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
-  const ddayLine = ddayText(effectiveDday);
+  const ddayList = studentDDay[studentId] || [];
 
   const weekDates = getWeekRange();
   const weekPlans = planEntries
@@ -2375,7 +2418,10 @@ function parentPlannerHtml(studentId){
   return `
     <div class="planner-stat-row">⏱️ 오늘 순공: <b>${formatSeconds(todaySecs)}</b></div>
     <div class="planner-stat-row">✅ 오늘 달성률: <b>${todayDone} / ${todayPlans.length}</b></div>
-    ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
+    <div class="settings-field" style="margin-top:14px; margin-bottom:0;">
+      <label>📆 D-Day</label>
+      <div style="margin-top:8px;">${ddayListHtml(studentId, ddayList, false)}</div>
+    </div>
     <div class="settings-field" style="margin-top:14px; margin-bottom:0;">
       <label>🗓️ 이번 주 계획</label>
       <div class="sched-list">${weekListHtml}</div>
@@ -2637,7 +2683,7 @@ window.addStudentHwItem = async function(studentId, date){
   studentHwItems[key].push({ id: 'shw' + Date.now(), text, done:false });
   await saveStudentHwItems(studentId);
   input.value = '';
-  renderStudentViewForId(studentId);
+  refreshStudentUI(studentId);
 };
 
 window.toggleStudentHwItem = async function(studentId, itemId, date){
@@ -2652,7 +2698,7 @@ window.toggleStudentHwItem = async function(studentId, itemId, date){
     recomputeStudentHwStatus(studentId);
     await saveRecords(studentId);
   }
-  renderStudentViewForId(studentId);
+  refreshStudentUI(studentId);
 };
 
 window.deleteStudentHwItem = async function(studentId, itemId, date){
@@ -2664,7 +2710,7 @@ window.deleteStudentHwItem = async function(studentId, itemId, date){
     recomputeStudentHwStatus(studentId);
     await saveRecords(studentId);
   }
-  renderStudentViewForId(studentId);
+  refreshStudentUI(studentId);
 };
 
 // editable=true: 체크박스+삭제+추가 입력창 (학생 화면, 오늘만). editable=false: 읽기 전용 (원장님/학부모 화면, 과거 날짜).
@@ -3216,9 +3262,7 @@ function renderStudentViewForId(studentId){
   const student = students.find(s => s.id === studentId);
   if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
-  const dday = studentDDay[studentId];
-  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
-  const ddayLine = ddayText(effectiveDday);
+  const ddayList = studentDDay[studentId] || [];
 
   summary.innerHTML = `
     <div class="hw-card">
@@ -3229,15 +3273,15 @@ function renderStudentViewForId(studentId){
     ${studentCalDayPanelHtml(studentId)}
 
     <div class="hw-card">
-      <label>📆 내 D-Day 설정</label>
-      <div class="settings-field" style="margin-top:10px;">
-        <input id="myDdayTitle_${studentId}" type="text" placeholder="예: 1학기 중간고사" value="${dday ? dday.title : ''}">
+      <label>📆 내 D-Day</label>
+      <div style="margin-top:8px;">${ddayListHtml(studentId, ddayList, true)}</div>
+      <div class="settings-field" style="margin-top:14px;">
+        <input id="ddayTitle_${studentId}" type="text" placeholder="예: 1학기 중간고사">
       </div>
       <div class="settings-field">
-        <input id="myDdayDate_${studentId}" type="date" value="${dday ? dday.date : ''}">
+        <input id="ddayDate_${studentId}" type="date">
       </div>
-      <button class="settings-save-btn" style="width:100%; background:var(--good); text-align:center;" onclick="saveMyDday('${studentId}')">D-Day 저장</button>
-      ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
+      <button class="settings-save-btn" style="width:100%; background:var(--good); text-align:center;" onclick="addStudentDday('${studentId}')">D-Day 추가</button>
     </div>
 
     ${classCommentsForStudentHtml(studentId)}
@@ -3265,20 +3309,6 @@ function renderStudentViewForId(studentId){
   renderTimerDisplay();
   renderSessions();
 }
-
-window.saveMyDday = async function(studentId){
-  const titleEl = document.getElementById('myDdayTitle_' + studentId);
-  const dateEl = document.getElementById('myDdayDate_' + studentId);
-  const title = titleEl.value.trim();
-  const date = dateEl.value;
-  if(title && date){
-    studentDDay[studentId] = { title, date };
-  } else {
-    delete studentDDay[studentId];
-  }
-  await saveStudentDDay(studentId);
-  renderStudentViewForId(studentId);
-};
 
 function escapeHtml(str){
   return String(str || '').replace(/[&<>"']/g, ch => ({
