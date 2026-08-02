@@ -365,24 +365,28 @@
   .sched-del:hover{ color:var(--absent); }
   .sched-empty{ text-align:center; padding:24px 12px; color:var(--ink-soft); font-size:13px; }
 
-  /* ---- Homework date-picker calendar (학생/학부모/관리 공용) ---- */
-  .hw-cal{ background:var(--paper); border:1px solid var(--line); border-radius:10px; padding:14px 16px; margin-bottom:20px; }
-  .hw-cal-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-  .hw-cal-title{ font-size:13.5px; font-weight:800; color:var(--ink); }
-  .hw-cal-nav{ width:26px; height:26px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:15px; color:var(--ink-soft); cursor:pointer; user-select:none; }
-  .hw-cal-nav:hover{ background:var(--bg); color:var(--ink); }
-  .hw-cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
-  .hw-cal-dow{ text-align:center; font-size:10.5px; font-weight:700; color:var(--ink-soft); padding-bottom:4px; }
-  .hw-cal-day{ position:relative; text-align:center; padding:7px 0; border-radius:8px; font-size:12px; color:var(--ink); cursor:pointer; font-variant-numeric:tabular-nums; }
-  .hw-cal-day:hover{ background:var(--bg); }
-  .hw-cal-day.other-month{ color:#C7C3B6; cursor:default; }
-  .hw-cal-day.other-month:hover{ background:none; }
-  .hw-cal-day.today{ box-shadow:inset 0 0 0 1.5px var(--ink); font-weight:800; }
-  .hw-cal-day.selected{ background:var(--ink); color:#fff; font-weight:800; }
-  .hw-cal-day .dot-mark{ position:absolute; bottom:2px; left:50%; transform:translateX(-50%); width:4px; height:4px; border-radius:50%; background:var(--warn); }
-  .hw-cal-day.selected .dot-mark{ background:#fff; }
-  .hw-cal-foot{ display:flex; align-items:center; justify-content:space-between; margin-top:10px; padding-top:10px; border-top:1px solid var(--line); font-size:12px; color:var(--ink-soft); }
-  .hw-cal-today-btn{ font-weight:700; color:var(--ink); cursor:pointer; text-decoration:underline; }
+  /* ---- Student calendar (숙제+일정 통합) ---- */
+  .cal-nav{ display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:4px; }
+  .cal-nav-btn{ cursor:pointer; font-size:13px; color:var(--ink-soft); padding:4px 10px; user-select:none; }
+  .cal-nav-btn:hover{ color:var(--ink); }
+  .cal-label{ font-size:14px; font-weight:800; color:var(--ink); min-width:88px; text-align:center; }
+  .cal-today-row{ text-align:right; margin-bottom:8px; }
+  .cal-today-btn{ font-size:11px; font-weight:700; color:var(--ink-soft); border:1px solid var(--line); border-radius:999px; padding:4px 10px; cursor:pointer; background:var(--paper); font-family:inherit; }
+  .cal-today-btn:hover{ border-color:var(--ink); color:var(--ink); }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
+  .cal-grid.cal-weekdays{ margin-bottom:2px; }
+  .cal-wd{ text-align:center; font-size:10.5px; font-weight:700; color:var(--ink-soft); padding:4px 0; }
+  .cal-cell{ position:relative; aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; font-size:12.5px; color:var(--ink); }
+  .cal-cell.empty{ cursor:default; }
+  .cal-cell:not(.empty):hover{ background:var(--bg); }
+  .cal-cell.today .cal-daynum{ font-weight:800; color:var(--good); }
+  .cal-cell.selected{ background:var(--ink); }
+  .cal-cell.selected .cal-daynum{ color:#fff; }
+  .cal-daynum{ font-variant-numeric:tabular-nums; }
+  .cal-dots{ display:flex; gap:2px; height:6px; margin-top:2px; }
+  .cal-dot{ width:5px; height:5px; border-radius:50%; }
+  .cal-dot.sched{ background:var(--absent); }
+  .cal-dot.hw{ background:var(--good); }
 
   .report-title{ font-size:15px; font-weight:800; color:var(--ink); }
   .report-sub{ font-size:11px; color:var(--ink-soft); margin-top:2px; }
@@ -673,17 +677,14 @@
 
   <div id="teacherView" style="display:none;">
   <div class="back-link" onclick="goHome()">← 홈으로</div>
-
-  <div id="teacherHwCal"></div>
-
   <div class="hw-card">
-    <label id="hwCardLabel">오늘의 숙제</label>
+    <label>오늘의 숙제</label>
     <input id="hwInput" type="text" placeholder="예: 수학의 정석 p.84~89, 12~20번 / 모의고사 3회 오답정리">
     <div class="save-msg" id="hwSaveMsg"></div>
   </div>
 
   <div class="settings-card">
-    <h3 id="hwItemListTitle">✅ 오늘의 숙제 체크리스트</h3>
+    <h3>✅ 오늘의 숙제 체크리스트</h3>
     <div class="settings-desc">과제를 항목별로 등록하면 학생 전용 앱에서 학생이 각자 체크할 수 있어요.</div>
     <div class="plan-add-row">
       <input id="hwItemInput" type="text" placeholder="예: 수학의 정석 p.84~89 풀기" style="flex:1;">
@@ -701,8 +702,8 @@
     <thead>
       <tr>
         <th style="width:22%">이름</th>
-        <th style="width:24%" id="rosterAttHeader">출석</th>
-        <th style="width:24%" id="rosterHwHeader">숙제 제출</th>
+        <th style="width:24%">출석</th>
+        <th style="width:24%">숙제 제출</th>
         <th>최근 14일</th>
         <th style="width:70px"></th>
       </tr>
@@ -1176,93 +1177,6 @@ document.getElementById('todayLabel').textContent = todayLabelText;
 const wcDateEl = document.getElementById('wcDate');
 if(wcDateEl) wcDateEl.textContent = todayLabelText + ' · 원장님 환영합니다 👋';
 
-// ---- 숙제 날짜별 달력(달력에서 날짜를 체크하면 그날의 숙제 리스트/체크 상태를 보여줌) ----
-// 세 화면(teacher=관리, student=학생 전용 앱, parent=학부모 보기)에서 각자 자기 상태를 갖습니다.
-const hwCalState = (() => {
-  const t = new Date(todayKey + 'T00:00:00');
-  const base = () => ({ year: t.getFullYear(), month: t.getMonth(), date: todayKey });
-  return { teacher: base(), student: base(), parent: base() };
-})();
-function calDate(ctx){ return hwCalState[ctx].date; }
-function formatDateLabel(date){
-  const d = new Date(date + 'T00:00:00');
-  return (d.getMonth()+1) + '월 ' + d.getDate() + '일';
-}
-function calendarMarksInMonth(monthPrefix, markStudentId){
-  const marks = new Set();
-  homeworkItems.forEach(i => { if(i.date && i.date.indexOf(monthPrefix) === 0) marks.add(i.date); });
-  Object.keys(studentHwItems).forEach(k => {
-    const parts = k.split(':');
-    const sid = parts[0], d = parts[1];
-    if(!d || d.indexOf(monthPrefix) !== 0) return;
-    if(markStudentId && sid !== markStudentId) return;
-    if((studentHwItems[k] || []).length > 0) marks.add(d);
-  });
-  return marks;
-}
-function calendarHtml(ctx, markStudentId){
-  const st = hwCalState[ctx];
-  const year = st.year, month = st.month;
-  const monthPrefix = year + '-' + pad(month+1);
-  const marks = calendarMarksInMonth(monthPrefix, markStudentId);
-  const firstDow = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month+1, 0).getDate();
-  const prevDays = new Date(year, month, 0).getDate();
-  const cells = [];
-  for(let i=0;i<firstDow;i++) cells.push({ dnum: prevDays - firstDow + 1 + i, other:true });
-  for(let d=1; d<=daysInMonth; d++) cells.push({ dnum:d, other:false, dateStr: monthPrefix + '-' + pad(d) });
-  let nextNum = 1;
-  while(cells.length % 7 !== 0) cells.push({ dnum: nextNum++, other:true });
-
-  const dowHtml = ['일','월','화','수','목','금','토'].map(d => `<div class="hw-cal-dow">${d}</div>`).join('');
-  const cellsHtml = cells.map(c => {
-    if(c.other) return `<div class="hw-cal-day other-month">${c.dnum}</div>`;
-    const cls = [c.dateStr === todayKey ? 'today' : '', c.dateStr === st.date ? 'selected' : ''].join(' ');
-    return `<div class="hw-cal-day ${cls}" onclick="hwCalSelect('${ctx}','${c.dateStr}')">${c.dnum}${marks.has(c.dateStr) ? '<span class="dot-mark"></span>' : ''}</div>`;
-  }).join('');
-
-  return `
-    <div class="hw-cal">
-      <div class="hw-cal-head">
-        <span class="hw-cal-nav" onclick="hwCalNav('${ctx}',-1)">‹</span>
-        <span class="hw-cal-title">${year}년 ${month+1}월</span>
-        <span class="hw-cal-nav" onclick="hwCalNav('${ctx}',1)">›</span>
-      </div>
-      <div class="hw-cal-grid">${dowHtml}${cellsHtml}</div>
-      <div class="hw-cal-foot">
-        <span>${formatDateLabel(st.date)}${st.date === todayKey ? ' (오늘)' : ''} 숙제 보기</span>
-        ${st.date !== todayKey ? `<span class="hw-cal-today-btn" onclick="hwCalToday('${ctx}')">오늘로</span>` : ''}
-      </div>
-    </div>
-  `;
-}
-function rerenderHwCal(ctx){
-  if(ctx === 'teacher'){ render(); }
-  else if(ctx === 'student'){
-    if(lockedStudentId && lockedRole === 'student') renderStudentViewForId(lockedStudentId);
-    else if(typeof window.renderStudentViewSelect === 'function') window.renderStudentViewSelect();
-  } else if(ctx === 'parent'){
-    if(lockedStudentId && lockedRole === 'parent') renderParentViewForId(lockedStudentId);
-    else if(typeof window.renderParentView === 'function') window.renderParentView();
-  }
-}
-window.hwCalNav = function(ctx, delta){
-  const st = hwCalState[ctx];
-  let m = st.month + delta, y = st.year;
-  if(m < 0){ m = 11; y--; } else if(m > 11){ m = 0; y++; }
-  st.month = m; st.year = y;
-  rerenderHwCal(ctx);
-};
-window.hwCalSelect = function(ctx, dateStr){
-  hwCalState[ctx].date = dateStr;
-  rerenderHwCal(ctx);
-};
-window.hwCalToday = function(ctx){
-  const t = new Date(todayKey + 'T00:00:00');
-  hwCalState[ctx] = { year: t.getFullYear(), month: t.getMonth(), date: todayKey };
-  rerenderHwCal(ctx);
-};
-
 const urlParams = new URLSearchParams(window.location.search);
 const lockedStudentId = urlParams.get('student');
 const lockedRole = urlParams.get('role') === 'student' ? 'student' : 'parent';
@@ -1631,18 +1545,6 @@ function render(){
   renderHwItemList();
   renderHomeClassFrame();
 
-  const teacherDate = calDate('teacher');
-  const calEl = document.getElementById('teacherHwCal');
-  if(calEl) calEl.innerHTML = calendarHtml('teacher');
-  const hwCardLabelEl = document.getElementById('hwCardLabel');
-  if(hwCardLabelEl) hwCardLabelEl.textContent = teacherDate === todayKey ? '오늘의 숙제' : formatDateLabel(teacherDate) + ' 숙제';
-  const hwInputEl = document.getElementById('hwInput');
-  if(hwInputEl && document.activeElement !== hwInputEl) hwInputEl.value = homeworkByDate[teacherDate] || '';
-  const attHeaderEl = document.getElementById('rosterAttHeader');
-  if(attHeaderEl) attHeaderEl.textContent = teacherDate === todayKey ? '출석' : '출석 (' + formatDateLabel(teacherDate) + ')';
-  const hwHeaderEl = document.getElementById('rosterHwHeader');
-  if(hwHeaderEl) hwHeaderEl.textContent = teacherDate === todayKey ? '숙제 제출' : '숙제 제출 (' + formatDateLabel(teacherDate) + ')';
-
   if(students.length === 0){
     body.innerHTML = '<tr><td colspan="4"><div class="empty">아직 등록된 학생이 없습니다. 위 "+ 학생 추가" 버튼으로 시작하세요.</div></td></tr>';
     return;
@@ -1650,7 +1552,7 @@ function render(){
 
   const dates = last14Dates();
   body.innerHTML = students.map(st => {
-    const key = st.id + ':' + teacherDate;
+    const key = st.id + ':' + todayKey;
     const rec = records[key] || {};
     const attPills = ['good','warn','absent'].map(v => {
       const label = v==='good' ? '출석' : v==='warn' ? '지각' : '결석';
@@ -1676,7 +1578,7 @@ function render(){
          </div>`
       : '';
 
-    const myItems = studentHwItemsForDate(st.id, teacherDate);
+    const myItems = todaysStudentHwItems(st.id);
     const myHwNote = myItems.length === 0 ? '' : `
       <div class="student-hw-note">
         ✍️ ${myItems.filter(i=>i.done).length}/${myItems.length} 완료 —
@@ -1697,7 +1599,7 @@ function render(){
 }
 
 window.setRecord = async function(studentId, field, value){
-  const key = studentId + ':' + calDate('teacher');
+  const key = studentId + ':' + todayKey;
   if(!records[key]) records[key] = {};
   records[key][field] = records[key][field] === value ? null : value;
   await saveRecords(studentId);
@@ -1777,7 +1679,7 @@ async function addStudent(){
 
 let hwTimer;
 document.getElementById('hwInput').addEventListener('input', (e) => {
-  homeworkByDate[calDate('teacher')] = e.target.value;
+  homeworkByDate[todayKey] = e.target.value;
   clearTimeout(hwTimer);
   const msg = document.getElementById('hwSaveMsg');
   msg.textContent = '저장 중...';
@@ -1969,6 +1871,113 @@ function studentScheduleHtml(studentId){
       </div>
     </div>`;
   }).join('') + '</div>';
+}
+
+// ---- Student calendar (숙제+일정 통합, 학생 전용 앱) ----
+let studentCalMonth = todayKey.slice(0,7); // 'YYYY-MM'
+let studentCalDate  = todayKey;            // 'YYYY-MM-DD'
+
+function calShiftMonth(ym, delta){
+  const [y,m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1);
+}
+function calDaysInMonth(ym){
+  const [y,m] = ym.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+function calFirstWeekday(ym){
+  const [y,m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).getDay(); // 0=Sun
+}
+
+function studentDayHasEvents(studentId, dateStr){
+  const hasSched = schedule.some(ev => (ev.studentId === studentId || ev.studentId === 'all') && ev.date === dateStr);
+  const hasHw = (studentHwItems[studentId + ':' + dateStr] || []).length > 0
+    || homeworkItems.some(i => i.date === dateStr)
+    || (dateStr === todayKey && !!homeworkByDate[todayKey]);
+  return { hasSched, hasHw };
+}
+
+window.studentCalNav = function(studentId, delta){
+  studentCalMonth = calShiftMonth(studentCalMonth, delta);
+  renderStudentViewForId(studentId);
+};
+window.studentCalToday = function(studentId){
+  studentCalMonth = todayKey.slice(0,7);
+  studentCalDate = todayKey;
+  renderStudentViewForId(studentId);
+};
+window.studentCalSelect = function(studentId, dateStr){
+  studentCalDate = dateStr;
+  renderStudentViewForId(studentId);
+};
+
+function studentCalendarHtml(studentId){
+  const ym = studentCalMonth;
+  const [y,m] = ym.split('-').map(Number);
+  const days = calDaysInMonth(ym);
+  const firstWd = calFirstWeekday(ym);
+  const weekdays = ['일','월','화','수','목','금','토'];
+
+  let cells = '';
+  for(let i = 0; i < firstWd; i++) cells += `<div class="cal-cell empty"></div>`;
+  for(let d = 1; d <= days; d++){
+    const dateStr = `${ym}-${pad(d)}`;
+    const { hasSched, hasHw } = studentDayHasEvents(studentId, dateStr);
+    const isToday = dateStr === todayKey;
+    const isSelected = dateStr === studentCalDate;
+    const dots = `${hasSched ? '<span class="cal-dot sched"></span>' : ''}${hasHw ? '<span class="cal-dot hw"></span>' : ''}`;
+    cells += `<div class="cal-cell ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" onclick="studentCalSelect('${studentId}','${dateStr}')">
+      <span class="cal-daynum">${d}</span>
+      <span class="cal-dots">${dots}</span>
+    </div>`;
+  }
+
+  return `
+    <div class="cal-nav">
+      <span class="cal-nav-btn" onclick="studentCalNav('${studentId}',-1)">◀</span>
+      <span class="cal-label">${y}년 ${m}월</span>
+      <span class="cal-nav-btn" onclick="studentCalNav('${studentId}',1)">▶</span>
+    </div>
+    <div class="cal-today-row"><span class="cal-today-btn" onclick="studentCalToday('${studentId}')">오늘로</span></div>
+    <div class="cal-grid cal-weekdays">${weekdays.map(w => `<div class="cal-wd">${w}</div>`).join('')}</div>
+    <div class="cal-grid">${cells}</div>
+  `;
+}
+
+function studentCalDayPanelHtml(studentId){
+  const dateStr = studentCalDate;
+  const isToday = dateStr === todayKey;
+  const md = dateStr.slice(5).replace('-', '.');
+
+  const evs = schedule.filter(ev => (ev.studentId === studentId || ev.studentId === 'all') && ev.date === dateStr);
+  const schedHtml = evs.length === 0
+    ? '<div class="sched-empty">이 날짜에 등록된 일정이 없습니다.</div>'
+    : '<div class="sched-list">' + evs.map(ev => `<div class="sched-item">
+        <div class="sched-body">
+          <div class="sched-title">${escapeHtml(ev.title)}</div>
+          <div class="sched-meta"><span class="sched-badge ${ev.type}">${schedTypeLabel(ev.type)}</span>${ev.studentId === 'all' ? '전체 학생' : ''}</div>
+        </div>
+      </div>`).join('') + '</div>';
+
+  const assignedHwText = homeworkByDate[dateStr] || '';
+  const teacherHwHtml = assignedHwText
+    ? `<div class="hw-label" style="margin-top:14px;">📋 선생님이 등록한 숙제</div><div class="hw-content" style="margin-top:6px;">${escapeHtml(assignedHwText)}</div>`
+    : '';
+
+  return `
+    <div class="hw-card">
+      <label>🗓️ ${md} 일정${isToday ? ' (오늘)' : ''}</label>
+      <div style="margin-top:8px;">${schedHtml}</div>
+      ${teacherHwHtml}
+    </div>
+    <div class="student-hw-card">
+      <div class="hw-label">✍️ ${md} 숙제 목록${!isToday ? ' (읽기 전용)' : ''}</div>
+      <div style="margin-top:8px;">${studentHwListHtml(studentId, isToday, dateStr)}</div>
+    </div>
+    ${hwChecklistStudentHtmlForDate(studentId, dateStr, isToday)}
+  `;
 }
 
 // ---- Study time (순공시간) ----
@@ -2518,15 +2527,15 @@ async function saveHomeworkItemChecks(studentId){
   }catch(e){ console.error('homeworkItemChecks 저장 오류:', e); }
   if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
 }
-function homeworkItemsForDate(date){
-  return homeworkItems.filter(i => i.date === date);
+function todaysHomeworkItems(){
+  return homeworkItems.filter(i => i.date === todayKey);
 }
 
 window.addHomeworkItem = async function(){
   const input = document.getElementById('hwItemInput');
   const text = input.value.trim();
   if(!text) return;
-  homeworkItems.push({ id: 'h' + Date.now(), date: calDate('teacher'), text });
+  homeworkItems.push({ id: 'h' + Date.now(), date: todayKey, text });
   await saveHomeworkItems();
   input.value = '';
   renderHwItemList();
@@ -2541,12 +2550,9 @@ window.deleteHomeworkItem = async function(id){
 function renderHwItemList(){
   const list = document.getElementById('hwItemList');
   if(!list) return;
-  const date = calDate('teacher');
-  const titleEl = document.getElementById('hwItemListTitle');
-  if(titleEl) titleEl.textContent = date === todayKey ? '✅ 오늘의 숙제 체크리스트' : `✅ ${formatDateLabel(date)} 숙제 체크리스트`;
-  const items = homeworkItemsForDate(date);
+  const items = todaysHomeworkItems();
   if(items.length === 0){
-    list.innerHTML = `<div class="sched-empty">${date === todayKey ? '오늘' : formatDateLabel(date)} 등록된 숙제 항목이 없습니다.</div>`;
+    list.innerHTML = '<div class="sched-empty">오늘 등록된 숙제 항목이 없습니다.</div>';
     return;
   }
   list.innerHTML = items.map(item => {
@@ -2560,8 +2566,7 @@ function renderHwItemList(){
 }
 
 function recomputeHwStatus(studentId){
-  // 학생이 오늘 체크박스를 직접 누를 때만 호출되므로 항상 '오늘' 기준으로 출석부 상태를 갱신합니다.
-  const items = homeworkItemsForDate(todayKey);
+  const items = todaysHomeworkItems();
   if(items.length === 0) return; // no items today: leave manual status untouched
   const doneCount = items.filter(i => homeworkItemChecks[studentId + ':' + i.id]).length;
   const key = studentId + ':' + todayKey;
@@ -2580,14 +2585,17 @@ window.toggleHwItemCheck = async function(studentId, itemId){
   renderStudentViewForId(studentId);
 };
 
-// date===오늘일 때만 체크 가능(editable). 다른 날짜는 학생/학부모/관리 모두 읽기 전용으로 봅니다.
-function hwChecklistHtml(studentId, date, editable){
-  const items = homeworkItemsForDate(date);
+function hwChecklistStudentHtml(studentId){
+  return hwChecklistStudentHtmlForDate(studentId, todayKey, true);
+}
+
+// 날짜별 교사 등록 숙제 체크리스트. editable=true일 때만 체크 가능 (오늘만 편집 허용).
+function hwChecklistStudentHtmlForDate(studentId, date, editable){
+  const items = homeworkItems.filter(i => i.date === date);
   if(items.length === 0) return '';
-  const title = date === todayKey ? '✅ 오늘 숙제 체크리스트' : `✅ ${formatDateLabel(date)} 숙제 체크리스트`;
   return `
     <div class="hw-card">
-      <label>${title}</label>
+      <label>✅ ${date === todayKey ? '오늘 ' : ''}숙제 체크리스트</label>
       <div class="sched-list" style="margin-top:8px;">
         ${items.map(item => {
           const checked = !!homeworkItemChecks[studentId + ':' + item.id];
@@ -2603,14 +2611,35 @@ function hwChecklistHtml(studentId, date, editable){
   `;
 }
 
-// ---- 학생이 직접 적는 숙제 목록 (학생/원장님/학부모 모두에게 보임, 날짜별) ----
+function hwChecklistParentHtml(studentId){
+  const items = todaysHomeworkItems();
+  if(items.length === 0) return '';
+  return `
+    <div class="settings-field" style="margin-top:14px; margin-bottom:0;">
+      <label>✅ 오늘 숙제 체크리스트</label>
+      <div class="sched-list">
+        ${items.map(item => {
+          const checked = !!homeworkItemChecks[studentId + ':' + item.id];
+          return `<div class="plan-item ${checked ? 'done' : ''}">
+            <span style="width:19px; flex-shrink:0; text-align:center;">${checked ? '✅' : '⬜'}</span>
+            <div class="plan-title">${item.text}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+// ---- 학생이 직접 적는 숙제 목록 (날짜별, 학생/원장님/학부모 모두에게 보임) ----
 function studentHwItemsForDate(studentId, date){
   return studentHwItems[studentId + ':' + date] || [];
 }
+function todaysStudentHwItems(studentId){
+  return studentHwItemsForDate(studentId, todayKey);
+}
 
 function recomputeStudentHwStatus(studentId){
-  // 학생이 오늘 항목을 직접 추가/체크할 때만 호출되므로 항상 '오늘' 기준입니다.
-  const items = studentHwItemsForDate(studentId, todayKey);
+  const items = todaysStudentHwItems(studentId);
   if(items.length === 0) return; // 학생이 적은 항목이 없으면 기존 상태를 건드리지 않습니다
   const doneCount = items.filter(i => i.done).length;
   const key = studentId + ':' + todayKey;
@@ -2618,12 +2647,13 @@ function recomputeStudentHwStatus(studentId){
   records[key].hw = doneCount === items.length ? 'good' : doneCount > 0 ? 'warn' : null;
 }
 
-window.addStudentHwItem = async function(studentId){
-  const input = document.getElementById('myHwItemInput_' + studentId);
+window.addStudentHwItem = async function(studentId, date){
+  date = date || todayKey;
+  const input = document.getElementById('myHwItemInput_' + studentId + '_' + date);
   if(!input) return;
   const text = input.value.trim();
   if(!text) return;
-  const key = studentId + ':' + todayKey;
+  const key = studentId + ':' + date;
   if(!studentHwItems[key]) studentHwItems[key] = [];
   studentHwItems[key].push({ id: 'shw' + Date.now(), text, done:false });
   await saveStudentHwItems(studentId);
@@ -2631,49 +2661,54 @@ window.addStudentHwItem = async function(studentId){
   renderStudentViewForId(studentId);
 };
 
-window.toggleStudentHwItem = async function(studentId, itemId){
-  const key = studentId + ':' + todayKey;
+window.toggleStudentHwItem = async function(studentId, itemId, date){
+  date = date || todayKey;
+  const key = studentId + ':' + date;
   const items = studentHwItems[key] || [];
   const item = items.find(i => i.id === itemId);
   if(!item) return;
   item.done = !item.done;
   await saveStudentHwItems(studentId);
-  recomputeStudentHwStatus(studentId);
-  await saveRecords(studentId);
+  if(date === todayKey){
+    recomputeStudentHwStatus(studentId);
+    await saveRecords(studentId);
+  }
   renderStudentViewForId(studentId);
 };
 
-window.deleteStudentHwItem = async function(studentId, itemId){
-  const key = studentId + ':' + todayKey;
+window.deleteStudentHwItem = async function(studentId, itemId, date){
+  date = date || todayKey;
+  const key = studentId + ':' + date;
   studentHwItems[key] = (studentHwItems[key] || []).filter(i => i.id !== itemId);
   await saveStudentHwItems(studentId);
-  recomputeStudentHwStatus(studentId);
-  await saveRecords(studentId);
+  if(date === todayKey){
+    recomputeStudentHwStatus(studentId);
+    await saveRecords(studentId);
+  }
   renderStudentViewForId(studentId);
 };
 
-// editableRequested=true: 체크박스+삭제+추가 입력창 (학생 화면). false: 읽기 전용 (원장님/학부모 화면).
-// 실제 편집은 date가 오늘일 때만 허용되고, 지난/다음 날짜는 항상 읽기 전용으로 보여줍니다.
-function studentHwListHtml(studentId, date, editableRequested){
-  const editable = editableRequested && date === todayKey;
+// editable=true: 체크박스+삭제+추가 입력창 (학생 화면, 오늘만). editable=false: 읽기 전용 (원장님/학부모 화면, 과거 날짜).
+function studentHwListHtml(studentId, editable, date){
+  date = date || todayKey;
   const items = studentHwItemsForDate(studentId, date);
   const listHtml = items.length === 0
-    ? `<div class="sched-empty">${editable ? '아직 추가한 숙제가 없습니다. 아래에서 추가해보세요.' : (date===todayKey ? '학생이 아직 적은 숙제가 없습니다.' : formatDateLabel(date) + '에 적은 숙제가 없습니다.')}</div>`
+    ? `<div class="sched-empty">${editable ? '아직 추가한 숙제가 없습니다. 아래에서 추가해보세요.' : '학생이 적은 숙제가 없습니다.'}</div>`
     : items.map(item => {
         const checked = !!item.done;
         return `<div class="plan-item ${checked ? 'done' : ''}">
           ${editable
-            ? `<input type="checkbox" class="plan-check" ${checked ? 'checked' : ''} onchange="toggleStudentHwItem('${studentId}','${item.id}')">`
+            ? `<input type="checkbox" class="plan-check" ${checked ? 'checked' : ''} onchange="toggleStudentHwItem('${studentId}','${item.id}','${date}')">`
             : `<span style="width:19px; flex-shrink:0; text-align:center;">${checked ? '✅' : '⬜'}</span>`}
           <div class="plan-title">${escapeHtml(item.text)}</div>
-          ${editable ? `<div class="sched-del" onclick="deleteStudentHwItem('${studentId}','${item.id}')">삭제</div>` : ''}
+          ${editable ? `<div class="sched-del" onclick="deleteStudentHwItem('${studentId}','${item.id}','${date}')">삭제</div>` : ''}
         </div>`;
       }).join('');
 
   const addRow = editable ? `
     <div class="new-row" style="margin-top:8px; border-radius:8px; border:1px solid var(--line);">
-      <input id="myHwItemInput_${studentId}" type="text" placeholder="예: 수학 20p 풀기" onkeydown="if(event.key==='Enter')addStudentHwItem('${studentId}')">
-      <button onclick="addStudentHwItem('${studentId}')">추가</button>
+      <input id="myHwItemInput_${studentId}_${date}" type="text" placeholder="예: 수학 20p 풀기" onkeydown="if(event.key==='Enter')addStudentHwItem('${studentId}','${date}')">
+      <button onclick="addStudentHwItem('${studentId}','${date}')">추가</button>
     </div>
   ` : '';
 
@@ -3097,7 +3132,6 @@ function renderParentViewForId(studentId){
   if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
   const todayRec = records[studentId + ':' + todayKey] || {};
-  const pDate = calDate('parent');
   const dates = last14Dates();
   let presentCount = 0, hwGoodCount = 0, checkedDays = 0;
   dates.forEach(d => {
@@ -3153,18 +3187,12 @@ function renderParentViewForId(studentId){
       </div>
     </div>
 
-    <div class="settings-card">
-      <h3 style="margin:0 0 4px;">📖 날짜별 숙제 확인</h3>
-      <div class="settings-desc">달력에서 날짜를 선택하면 그날의 숙제 내용과 체크 현황을 볼 수 있어요.</div>
-      <div style="margin-top:10px;">${calendarHtml('parent', studentId)}</div>
-    </div>
-
     <div class="hw-card">
-      <label>${pDate === todayKey ? '오늘의 숙제 내용' : formatDateLabel(pDate) + ' 숙제 내용'}</label>
-      <div class="hw-text-display">${homeworkByDate[pDate] ? homeworkByDate[pDate] : '선생님이 등록한 숙제가 없습니다.'}</div>
-      <div style="font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-top:14px; margin-bottom:8px;">✍️ 우리 아이가 적은 ${pDate === todayKey ? '오늘의' : formatDateLabel(pDate)} 숙제</div>
-      <div style="margin-top:8px;">${studentHwListHtml(studentId, pDate, false)}</div>
-      ${hwChecklistHtml(studentId, pDate, false)}
+      <label>오늘의 숙제 내용</label>
+      <div class="hw-text-display">${homeworkByDate[todayKey] ? homeworkByDate[todayKey] : '선생님이 등록한 숙제가 없습니다.'}</div>
+      <div style="font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-top:14px; margin-bottom:8px;">✍️ 우리 아이가 적은 오늘의 숙제</div>
+      <div style="margin-top:8px;">${studentHwListHtml(studentId, false)}</div>
+      ${hwChecklistParentHtml(studentId)}
     </div>
 
     ${classCommentsForStudentHtml(studentId)}
@@ -3210,10 +3238,9 @@ function renderStudentViewForId(studentId){
   if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
   const todayRec = records[studentId + ':' + todayKey] || {};
-  const sDate = calDate('student');
-  const assignedHwText = homeworkByDate[sDate] || '';
+  const assignedHwText = homeworkByDate[todayKey] || '';
   const hwState = todayRec.hw || null;
-  const myItems = studentHwItemsForDate(studentId, sDate);
+  const myItems = todaysStudentHwItems(studentId);
 
   const hwBtns = [
     { v:'good', label:'✅ 완료했어요' },
@@ -3223,30 +3250,18 @@ function renderStudentViewForId(studentId){
 
   summary.innerHTML = `
     <div class="hw-card">
-      <label>📅 날짜별 숙제 보기</label>
-      <div class="settings-desc">달력에서 날짜를 선택하면 그날의 숙제 목록과 체크 현황을 볼 수 있어요. (수정은 오늘 날짜만 가능해요)</div>
-      <div style="margin-top:10px;">${calendarHtml('student', studentId)}</div>
+      <label>📅 숙제·일정 달력</label>
+      <div style="margin-top:10px;">${studentCalendarHtml(studentId)}</div>
     </div>
 
-    <div class="student-hw-card">
-      ${assignedHwText ? `
-        <div class="hw-label">📋 선생님이 등록한 ${sDate === todayKey ? '숙제' : formatDateLabel(sDate) + ' 숙제'}</div>
-        <div class="hw-content" style="margin-bottom:14px;">${assignedHwText}</div>
-      ` : ''}
-      <div class="hw-label">✍️ ${sDate === todayKey ? '오늘 내' : formatDateLabel(sDate)} 숙제 목록</div>
-      <div style="margin-top:8px;">${studentHwListHtml(studentId, sDate, true)}</div>
-      ${sDate === todayKey && myItems.length === 0 ? `
-        <div class="hw-label" style="margin-top:14px;">내 숙제 상태</div>
-        <div class="hw-self-btns">${hwBtns}</div>
-      ` : ''}
-    </div>
+    ${studentCalDayPanelHtml(studentId)}
 
-    ${hwChecklistHtml(studentId, sDate, sDate === todayKey)}
-
-    <div class="hw-card">
-      <label>📅 다가오는 일정</label>
-      <div style="margin-top:8px;">${studentScheduleHtml(studentId)}</div>
-    </div>
+    ${myItems.length === 0 ? `
+      <div class="hw-card">
+        <div class="hw-label">오늘 숙제 상태</div>
+        <div class="hw-self-btns" style="margin-top:8px;">${hwBtns}</div>
+      </div>
+    ` : ''}
 
     ${classCommentsForStudentHtml(studentId)}
 
