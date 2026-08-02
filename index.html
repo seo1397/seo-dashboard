@@ -2286,16 +2286,9 @@ function renderPlannerForStudent(studentId){
     </div>
 
     <div class="settings-card">
-      <h3>📆 학생 맞춤 D-Day 설정</h3>
-      <div class="settings-field">
-        <input id="plannerDdayTitle" type="text" placeholder="예: 1학기 중간고사" value="${dday ? dday.title : ''}">
-      </div>
-      <div class="settings-field">
-        <input id="plannerDdayDate" type="date" value="${dday ? dday.date : ''}">
-      </div>
-      <button class="settings-save-btn" style="width:100%; background:var(--good); text-align:center;" onclick="savePlannerDday('${studentId}')">학생 전용 D-Day 저장</button>
-      <div class="settings-desc" style="text-align:center; margin-top:8px; margin-bottom:0;">비워두고 저장 시 전체 기본 D-Day가 표시됩니다.</div>
-      ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
+      <h3>📆 학생 D-Day</h3>
+      <div class="settings-desc">학생이 학생 전용 앱에서 직접 설정합니다. 여기서는 확인만 할 수 있어요.</div>
+      ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : '<div class="sched-empty">아직 학생이 D-Day를 설정하지 않았습니다.</div>'}
     </div>
 
     <div class="settings-card">
@@ -2325,20 +2318,6 @@ window.plannerDeleteStudent = async function(studentId){
   render();
   populatePlannerStudentSelect();
   window.renderPlannerForSelected();
-};
-
-window.savePlannerDday = async function(studentId){
-  const titleEl = document.getElementById('plannerDdayTitle');
-  const dateEl = document.getElementById('plannerDdayDate');
-  const title = titleEl.value.trim();
-  const date = dateEl.value;
-  if(title && date){
-    studentDDay[studentId] = { title, date };
-  } else {
-    delete studentDDay[studentId];
-  }
-  await saveStudentDDay(studentId);
-  renderPlannerForStudent(studentId);
 };
 
 window.addPlanEntry = async function(studentId){
@@ -3237,16 +3216,9 @@ function renderStudentViewForId(studentId){
   const student = students.find(s => s.id === studentId);
   if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
-  const todayRec = records[studentId + ':' + todayKey] || {};
-  const assignedHwText = homeworkByDate[todayKey] || '';
-  const hwState = todayRec.hw || null;
-  const myItems = todaysStudentHwItems(studentId);
-
-  const hwBtns = [
-    { v:'good', label:'✅ 완료했어요' },
-    { v:'warn', label:'🔶 일부만 했어요' },
-    { v:'absent', label:'❌ 못 했어요' },
-  ].map(b => `<button class="hw-self-btn ${hwState === b.v ? 'active '+b.v : ''}" onclick="studentSetHw('${studentId}','${b.v}')">${b.label}</button>`).join('');
+  const dday = studentDDay[studentId];
+  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
+  const ddayLine = ddayText(effectiveDday);
 
   summary.innerHTML = `
     <div class="hw-card">
@@ -3256,12 +3228,17 @@ function renderStudentViewForId(studentId){
 
     ${studentCalDayPanelHtml(studentId)}
 
-    ${myItems.length === 0 ? `
-      <div class="hw-card">
-        <div class="hw-label">오늘 숙제 상태</div>
-        <div class="hw-self-btns" style="margin-top:8px;">${hwBtns}</div>
+    <div class="hw-card">
+      <label>📆 내 D-Day 설정</label>
+      <div class="settings-field" style="margin-top:10px;">
+        <input id="myDdayTitle_${studentId}" type="text" placeholder="예: 1학기 중간고사" value="${dday ? dday.title : ''}">
       </div>
-    ` : ''}
+      <div class="settings-field">
+        <input id="myDdayDate_${studentId}" type="date" value="${dday ? dday.date : ''}">
+      </div>
+      <button class="settings-save-btn" style="width:100%; background:var(--good); text-align:center;" onclick="saveMyDday('${studentId}')">D-Day 저장</button>
+      ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
+    </div>
 
     ${classCommentsForStudentHtml(studentId)}
 
@@ -3289,11 +3266,17 @@ function renderStudentViewForId(studentId){
   renderSessions();
 }
 
-window.studentSetHw = async function(studentId, val){
-  const key = studentId + ':' + todayKey;
-  if(!records[key]) records[key] = {};
-  records[key].hw = records[key].hw === val ? null : val;
-  await saveRecords(studentId);
+window.saveMyDday = async function(studentId){
+  const titleEl = document.getElementById('myDdayTitle_' + studentId);
+  const dateEl = document.getElementById('myDdayDate_' + studentId);
+  const title = titleEl.value.trim();
+  const date = dateEl.value;
+  if(title && date){
+    studentDDay[studentId] = { title, date };
+  } else {
+    delete studentDDay[studentId];
+  }
+  await saveStudentDDay(studentId);
   renderStudentViewForId(studentId);
 };
 
