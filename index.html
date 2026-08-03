@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>출결부 — 수학 클래스 관리</title>
 <style>
   @import url('https://cdnjs.cloudflare.com/ajax/libs/Pretendard/1.3.9/static/pretendard.css');
@@ -22,8 +22,6 @@
     --accent: #A8D8F0;
   }
   *{box-sizing:border-box;}
-  html{ -webkit-text-size-adjust:100%; text-size-adjust:100%; }
-  html, body{ width:100%; max-width:100%; overflow-x:hidden; }
   body{
     margin:0;
     font-family:'Pretendard', -apple-system, sans-serif;
@@ -47,7 +45,7 @@
 
   .hw-card{
     background:var(--paper); border:1px solid var(--line); border-radius:10px;
-    padding:16px 18px; margin-bottom:20px; width:100%; min-width:0;
+    padding:16px 18px; margin-bottom:20px;
   }
   .hw-card label{ font-size:12px; font-weight:700; color:var(--ink-soft); display:block; margin-bottom:6px; }
   .hw-card input{
@@ -375,10 +373,10 @@
   .cal-today-row{ text-align:right; margin-bottom:8px; }
   .cal-today-btn{ font-size:11px; font-weight:700; color:var(--ink-soft); border:1px solid var(--line); border-radius:999px; padding:4px 10px; cursor:pointer; background:var(--paper); font-family:inherit; }
   .cal-today-btn:hover{ border-color:var(--ink); color:var(--ink); }
-  .cal-grid{ display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:3px; width:100%; }
+  .cal-grid{ display:grid; grid-template-columns:repeat(7,1fr); gap:3px; }
   .cal-grid.cal-weekdays{ margin-bottom:2px; }
-  .cal-wd{ text-align:center; font-size:10.5px; font-weight:700; color:var(--ink-soft); padding:4px 0; min-width:0; }
-  .cal-cell{ position:relative; aspect-ratio:1; min-width:0; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; font-size:12.5px; color:var(--ink); }
+  .cal-wd{ text-align:center; font-size:10.5px; font-weight:700; color:var(--ink-soft); padding:4px 0; }
+  .cal-cell{ position:relative; aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center; border-radius:8px; cursor:pointer; font-size:12.5px; color:var(--ink); }
   .cal-cell.empty{ cursor:default; }
   .cal-cell:not(.empty):hover{ background:var(--bg); }
   .cal-cell.today .cal-daynum{ font-weight:800; color:var(--good); }
@@ -561,7 +559,6 @@
       <button class="side-item" data-mode="teacher" onclick="setMode('teacher')"><span class="side-icon">✋</span><span class="side-label">출결 관리</span></button>
       <button class="side-item" data-mode="teacher" onclick="setMode('teacher')"><span class="side-icon">👥</span><span class="side-label">학생 관리</span></button>
       <button class="side-item" data-mode="report" onclick="setMode('report')"><span class="side-icon">📝</span><span class="side-label">학생 리포트</span></button>
-      <button class="side-item" data-mode="planner" onclick="setMode('planner')"><span class="side-icon">🗓️</span><span class="side-label">학생 플래너</span></button>
       <button class="side-item disabled" disabled><span class="side-icon">📚</span><span class="side-label">문제은행·학습지</span><span class="side-soon">준비중</span></button>
       <button class="side-item disabled" disabled><span class="side-icon">🗂️</span><span class="side-label">수학 자료방</span><span class="side-soon">준비중</span></button>
       <div class="side-divider"></div>
@@ -2378,10 +2375,6 @@ function parentPlannerHtml(studentId){
     <div class="planner-stat-row">⏱️ 오늘 순공: <b>${formatSeconds(todaySecs)}</b></div>
     <div class="planner-stat-row">✅ 오늘 달성률: <b>${todayDone} / ${todayPlans.length}</b></div>
     ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
-    <div class="settings-field" style="margin-top:14px; margin-bottom:0;">
-      <label>🗓️ 이번 주 계획</label>
-      <div class="sched-list">${weekListHtml}</div>
-    </div>
   `;
 }
 
@@ -3134,10 +3127,6 @@ function renderParentViewForId(studentId){
   summary.innerHTML = `
     <div class="today-status">
       <div class="status-card">
-        <div class="label">오늘 출석</div>
-        <span class="badge ${statusClass(todayRec.att)}">${statusLabel(todayRec.att,'att')}</span>
-      </div>
-      <div class="status-card">
         <div class="label">오늘 숙제</div>
         <span class="badge ${statusClass(todayRec.hw)}">${statusLabel(todayRec.hw,'hw')}</span>
       </div>
@@ -3158,10 +3147,6 @@ function renderParentViewForId(studentId){
     </div>
 
     <div class="stat-grid">
-      <div class="stat-box">
-        <div class="stat-label">최근 14일 출석률</div>
-        <div class="stat-value ${attRate >= 80 ? 'good' : 'warn'}">${attRate}%</div>
-      </div>
       <div class="stat-box">
         <div class="stat-label">최근 14일 숙제 완료</div>
         <div class="stat-value ${hwGoodCount >= 10 ? 'good' : 'warn'}">${hwGoodCount}일</div>
