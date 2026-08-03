@@ -765,21 +765,6 @@
       <div class="save-msg" id="settingsSaveMsg"></div>
       <button class="settings-save-btn" style="background:transparent; color:var(--absent); border:1px solid var(--absent); margin-top:8px;" onclick="handleTeacherLogout()">로그아웃</button>
     </div>
-
-    <div class="settings-card">
-      <h3>📆 전체 기본 D-Day</h3>
-      <div class="settings-desc">학생 플래너에서 개별 D-Day를 비워두면 이 기본값이 대신 표시됩니다.</div>
-      <div class="settings-field">
-        <label>제목</label>
-        <input id="defaultDdayTitle" type="text" placeholder="예: 여름방학 특강 시작">
-      </div>
-      <div class="settings-field">
-        <label>날짜</label>
-        <input id="defaultDdayDate" type="date">
-      </div>
-      <button class="settings-save-btn" onclick="saveDefaultDday()">기본 D-Day 저장</button>
-      <div class="save-msg" id="defaultDdaySaveMsg"></div>
-    </div>
   </div>
 
   <div id="scheduleView" style="display:none;">
@@ -839,35 +824,6 @@
       <div class="settings-desc">학부모 리포트 화면에 그대로 표시됩니다.</div>
       <textarea id="reportProgressInput" oninput="onProgressInput(event)" placeholder="예: 이차함수 단원 완료, 다음 주부터 삼각함수 진도 예정입니다."></textarea>
       <div class="save-msg" id="reportProgressMsg"></div>
-    </div>
-
-    <div class="settings-card">
-      <h3>📝 시험 점수 추가</h3>
-      <div class="settings-field">
-        <label>시험 이름</label>
-        <input id="reportScoreTitle" type="text" placeholder="예: 6월 모의고사">
-      </div>
-      <div style="display:flex; gap:10px;">
-        <div class="settings-field" style="flex:1;">
-          <label>점수</label>
-          <input id="reportScoreValue" type="number" placeholder="85">
-        </div>
-        <div class="settings-field" style="flex:1;">
-          <label>만점</label>
-          <input id="reportScoreMax" type="number" placeholder="100">
-        </div>
-      </div>
-      <div class="settings-field">
-        <label>날짜</label>
-        <input id="reportScoreDate" type="date">
-      </div>
-      <button class="settings-save-btn" onclick="addTestScore()">점수 추가</button>
-      <div class="save-msg" id="reportScoreMsg"></div>
-    </div>
-
-    <div class="settings-card">
-      <h3>🗂️ 등록된 시험 점수</h3>
-      <div class="sched-list" id="reportScoreList"></div>
     </div>
   </div>
 
