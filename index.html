@@ -2172,8 +2172,15 @@ function ddayText(dday){
 }
 
 // D-Day list: admin sets up to 3 per student; only entries with both title and date are shown
+function normalizeDdayList(raw){
+  if(!raw) return [];
+  if(Array.isArray(raw)) return raw;
+  if(raw.title || raw.date) return [raw]; // backward-compat: old single-object format
+  return [];
+}
+
 function effectiveDdayList(studentId){
-  const list = (studentDDay[studentId] || []).filter(d => d && d.title && d.date);
+  const list = normalizeDdayList(studentDDay[studentId]).filter(d => d && d.title && d.date);
   if(list.length > 0) return list.slice(0, 3);
   return (defaultDDay && defaultDDay.date) ? [defaultDDay] : [];
 }
@@ -2215,7 +2222,7 @@ function renderPlannerForStudent(studentId){
   const todayDone = todayPlans.filter(p => p.done).length;
 
   const isVisible = !!parentVisible[studentId];
-  const ddayList = studentDDay[studentId] || [];
+  const ddayList = normalizeDdayList(studentDDay[studentId]);
 
   const weekDates = getWeekRange();
   const weekPlans = planEntries
