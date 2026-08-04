@@ -421,6 +421,7 @@
   .qna-item{ background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:10px; }
   .qna-top{ display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
   .qna-student{ font-size:12.5px; font-weight:800; color:var(--ink); }
+  .qna-asker{ font-size:10.5px; font-weight:700; color:var(--ink-soft); background:var(--panel-bg,#F3F1EC); padding:2px 7px; border-radius:999px; }
   .qna-date{ font-size:11px; color:var(--ink-soft); }
   .qna-question{ font-size:14px; color:var(--ink); line-height:1.5; margin-bottom:10px; white-space:pre-wrap; }
   .qna-status{ display:inline-block; font-size:10.5px; font-weight:800; padding:2px 8px; border-radius:999px; margin-bottom:8px; }
@@ -559,11 +560,15 @@
       <button class="side-item" data-mode="teacher" onclick="setMode('teacher')"><span class="side-icon">✋</span><span class="side-label">출결 관리</span></button>
       <button class="side-item" data-mode="teacher" onclick="setMode('teacher')"><span class="side-icon">👥</span><span class="side-label">학생 관리</span></button>
       <button class="side-item" data-mode="report" onclick="setMode('report')"><span class="side-icon">📝</span><span class="side-label">학생 리포트</span></button>
+      <button class="side-item disabled" disabled><span class="side-icon">📚</span><span class="side-label">문제은행·학습지</span><span class="side-soon">준비중</span></button>
+      <button class="side-item disabled" disabled><span class="side-icon">🗂️</span><span class="side-label">수학 자료방</span><span class="side-soon">준비중</span></button>
       <div class="side-divider"></div>
       <button class="side-item" data-mode="schedule" onclick="setMode('schedule')"><span class="side-icon">📅</span><span class="side-label">일정 달력</span></button>
+      <button class="side-item disabled" disabled><span class="side-icon">📋</span><span class="side-label">홈피 게시판</span><span class="side-soon">준비중</span></button>
       <button class="side-item" data-mode="parent" onclick="goParentEntry()"><span class="side-icon">👨‍👩‍👧</span><span class="side-label">학부모 관리</span></button>
       <button class="side-item" data-mode="student" onclick="setMode('student')"><span class="side-icon">🎓</span><span class="side-label">학생 전용 앱</span></button>
       <button class="side-item" data-mode="qna" onclick="setMode('qna')"><span class="side-icon">💬</span><span class="side-label">질문 Q&A</span><span class="side-soon" id="qnaSideBadge" style="display:none;"></span></button>
+      <button class="side-item disabled" disabled><span class="side-icon">🧑‍🏫</span><span class="side-label">강사 관리</span><span class="side-soon">준비중</span></button>
     </nav>
   </aside>
 
@@ -765,6 +770,21 @@
       <div class="save-msg" id="settingsSaveMsg"></div>
       <button class="settings-save-btn" style="background:transparent; color:var(--absent); border:1px solid var(--absent); margin-top:8px;" onclick="handleTeacherLogout()">로그아웃</button>
     </div>
+
+    <div class="settings-card">
+      <h3>📆 전체 기본 D-Day</h3>
+      <div class="settings-desc">학생 플래너에서 개별 D-Day를 비워두면 이 기본값이 대신 표시됩니다.</div>
+      <div class="settings-field">
+        <label>제목</label>
+        <input id="defaultDdayTitle" type="text" placeholder="예: 여름방학 특강 시작">
+      </div>
+      <div class="settings-field">
+        <label>날짜</label>
+        <input id="defaultDdayDate" type="date">
+      </div>
+      <button class="settings-save-btn" onclick="saveDefaultDday()">기본 D-Day 저장</button>
+      <div class="save-msg" id="defaultDdaySaveMsg"></div>
+    </div>
   </div>
 
   <div id="scheduleView" style="display:none;">
@@ -824,6 +844,35 @@
       <div class="settings-desc">학부모 리포트 화면에 그대로 표시됩니다.</div>
       <textarea id="reportProgressInput" oninput="onProgressInput(event)" placeholder="예: 이차함수 단원 완료, 다음 주부터 삼각함수 진도 예정입니다."></textarea>
       <div class="save-msg" id="reportProgressMsg"></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>📝 시험 점수 추가</h3>
+      <div class="settings-field">
+        <label>시험 이름</label>
+        <input id="reportScoreTitle" type="text" placeholder="예: 6월 모의고사">
+      </div>
+      <div style="display:flex; gap:10px;">
+        <div class="settings-field" style="flex:1;">
+          <label>점수</label>
+          <input id="reportScoreValue" type="number" placeholder="85">
+        </div>
+        <div class="settings-field" style="flex:1;">
+          <label>만점</label>
+          <input id="reportScoreMax" type="number" placeholder="100">
+        </div>
+      </div>
+      <div class="settings-field">
+        <label>날짜</label>
+        <input id="reportScoreDate" type="date">
+      </div>
+      <button class="settings-save-btn" onclick="addTestScore()">점수 추가</button>
+      <div class="save-msg" id="reportScoreMsg"></div>
+    </div>
+
+    <div class="settings-card">
+      <h3>🗂️ 등록된 시험 점수</h3>
+      <div class="sched-list" id="reportScoreList"></div>
     </div>
   </div>
 
@@ -1060,7 +1109,7 @@ function buildStudentSnapshot(studentId){
     progress: progressByStudent[studentId] || '',
     testScores: (testScores || []).filter(t => t.studentId === studentId),
     planEntries: (planEntries || []).filter(p => p.studentId === studentId),
-    dday: effectiveDdayList(studentId),
+    dday: studentDDay[studentId] || defaultDDay || null,
     parentVisible: !!parentVisible[studentId],
     questions: (questions || []).filter(q => q.studentId === studentId),
     classComments: cid ? (classComments || []).filter(c => c.classId === cid) : [],
@@ -1144,7 +1193,7 @@ let studyTimeByDate = {}; // { "studentId:date": totalSeconds }
 let progressByStudent = {}; // { studentId: text }
 let testScores = []; // [{id, studentId, title, score, maxScore, date}]
 let planEntries = []; // [{id, studentId, date:'YYYY-MM-DD', title, done}]
-let studentDDay = {}; // { studentId: [{title, date}, ...] } — up to 3 entries, admin-set
+let studentDDay = {}; // { studentId: {title, date} }
 let defaultDDay = null; // {title, date} or null
 let parentVisible = {}; // { studentId: boolean } - whether planner is shown to that student's parent
 let questions = []; // [{id, studentId, text, answer, date, answeredAt}]
@@ -2062,19 +2111,6 @@ window.deleteTestScore = async function(id){
 function parentReportHtml(studentId){
   const { last7, last14 } = studentStudyTimeSummary(studentId);
   const progress = progressByStudent[studentId] || '아직 등록된 진도 내용이 없습니다.';
-  const scores = testScores.filter(t => t.studentId === studentId).sort((a,b) => b.date.localeCompare(a.date)).slice(0, 5);
-
-  const scoreRows = scores.length === 0
-    ? '<div class="sched-empty">등록된 시험 점수가 없습니다.</div>'
-    : scores.map(t => `
-      <div class="sched-item">
-        <div class="sched-date">${t.date.slice(5).replace('-', '.')}</div>
-        <div class="sched-body">
-          <div class="sched-title">${t.title}</div>
-          <div class="sched-meta">${t.score} / ${t.maxScore}점 (${Math.round(t.score/t.maxScore*100)}%)</div>
-        </div>
-      </div>
-    `).join('');
 
   return `
     <div class="report-title">📊 ${students.find(s=>s.id===studentId)?.name || ''} 학생 리포트</div>
@@ -2091,14 +2127,9 @@ function parentReportHtml(studentId){
       </div>
     </div>
 
-    <div class="settings-field">
+    <div class="settings-field" style="margin-bottom:0;">
       <label>📈 학습 진도</label>
       <div class="hw-text-display">${progress}</div>
-    </div>
-
-    <div class="settings-field" style="margin-bottom:0;">
-      <label>📝 최근 시험 점수</label>
-      <div class="sched-list">${scoreRows}</div>
     </div>
   `;
 }
@@ -2171,26 +2202,6 @@ function ddayText(dday){
   return `${label} · ${dday.title} (${dday.date})`;
 }
 
-// D-Day list: admin sets up to 3 per student; only entries with both title and date are shown
-function normalizeDdayList(raw){
-  if(!raw) return [];
-  if(Array.isArray(raw)) return raw;
-  if(raw.title || raw.date) return [raw]; // backward-compat: old single-object format
-  return [];
-}
-
-function effectiveDdayList(studentId){
-  const list = normalizeDdayList(studentDDay[studentId]).filter(d => d && d.title && d.date);
-  if(list.length > 0) return list.slice(0, 3);
-  return (defaultDDay && defaultDDay.date) ? [defaultDDay] : [];
-}
-
-function ddayBadgesHtml(studentId){
-  const list = effectiveDdayList(studentId);
-  if(list.length === 0) return '';
-  return list.map(d => `<div class="dday-badge">${ddayText(d)}</div>`).join('');
-}
-
 function populatePlannerStudentSelect(){
   const sel = document.getElementById('plannerStudentSelect');
   if(!sel) return;
@@ -2222,7 +2233,9 @@ function renderPlannerForStudent(studentId){
   const todayDone = todayPlans.filter(p => p.done).length;
 
   const isVisible = !!parentVisible[studentId];
-  const ddayList = normalizeDdayList(studentDDay[studentId]);
+  const dday = studentDDay[studentId];
+  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
+  const ddayLine = ddayText(effectiveDday);
 
   const weekDates = getWeekRange();
   const weekPlans = planEntries
@@ -2237,13 +2250,6 @@ function renderPlannerForStudent(studentId){
         <div class="plan-date">${p.date.slice(5).replace('-','.')}</div>
         <div class="plan-title">${p.title}</div>
         <div class="sched-del" onclick="deletePlanEntry('${p.id}')">삭제</div>
-      </div>
-    `).join('');
-
-  const ddayInputRows = [0,1,2].map(i => `
-      <div style="display:flex; gap:8px; margin-bottom:8px;">
-        <input id="plannerDdayTitle_${studentId}_${i}" type="text" placeholder="예: 1학기 중간고사" style="flex:1.3;" value="${ddayList[i] ? escapeHtml(ddayList[i].title || '') : ''}">
-        <input id="plannerDdayDate_${studentId}_${i}" type="date" style="flex:1;" value="${ddayList[i] ? (ddayList[i].date || '') : ''}">
       </div>
     `).join('');
 
@@ -2262,11 +2268,9 @@ function renderPlannerForStudent(studentId){
     </div>
 
     <div class="settings-card">
-      <h3>📆 학생 D-Day (최대 3개)</h3>
-      <div class="settings-desc">여기서 설정하면 학생·학부모 화면에는 내용이 채워진 D-Day만 표시됩니다.</div>
-      ${ddayInputRows}
-      <button class="settings-save-btn" style="width:100%;" onclick="saveStudentDdayList('${studentId}')">D-Day 저장</button>
-      <div class="save-msg" id="plannerDdaySaveMsg_${studentId}"></div>
+      <h3>📆 학생 D-Day</h3>
+      <div class="settings-desc">학생이 학생 전용 앱에서 직접 설정합니다. 여기서는 확인만 할 수 있어요.</div>
+      ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : '<div class="sched-empty">아직 학생이 D-Day를 설정하지 않았습니다.</div>'}
     </div>
 
     <div class="settings-card">
@@ -2280,21 +2284,6 @@ function renderPlannerForStudent(studentId){
     </div>
   `;
 }
-
-window.saveStudentDdayList = async function(studentId){
-  const list = [0,1,2].map(i => {
-    const titleEl = document.getElementById(`plannerDdayTitle_${studentId}_${i}`);
-    const dateEl = document.getElementById(`plannerDdayDate_${studentId}_${i}`);
-    return { title: titleEl ? titleEl.value.trim() : '', date: dateEl ? dateEl.value : '' };
-  }).filter(d => d.title && d.date);
-
-  studentDDay[studentId] = list;
-  await saveStudentDDay(studentId);
-  await syncStudentPublic(studentId);
-
-  const msg = document.getElementById(`plannerDdaySaveMsg_${studentId}`);
-  if(msg){ msg.style.color = 'var(--good)'; msg.textContent = '저장됨 ✓'; setTimeout(() => msg.textContent = '', 1500); }
-};
 
 window.toggleParentVisible = async function(studentId){
   parentVisible[studentId] = !parentVisible[studentId];
@@ -2347,12 +2336,28 @@ function parentPlannerHtml(studentId){
   const todaySecs = studyTimeByDate[studentId + ':' + todayKey] || 0;
   const todayPlans = planEntries.filter(p => p.studentId === studentId && p.date === todayKey);
   const todayDone = todayPlans.filter(p => p.done).length;
-  const ddayBadges = ddayBadgesHtml(studentId);
+  const dday = studentDDay[studentId];
+  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
+  const ddayLine = ddayText(effectiveDday);
+
+  const weekDates = getWeekRange();
+  const weekPlans = planEntries
+    .filter(p => p.studentId === studentId && weekDates.includes(p.date))
+    .sort((a,b) => a.date.localeCompare(b.date));
+  const weekListHtml = weekPlans.length === 0
+    ? '<div class="sched-empty">이번 주 작성된 계획이 없습니다.</div>'
+    : weekPlans.map(p => `
+      <div class="plan-item ${p.done ? 'done' : ''}">
+        <span style="width:19px; flex-shrink:0; text-align:center;">${p.done ? '✅' : '⬜'}</span>
+        <div class="plan-date">${p.date.slice(5).replace('-','.')}</div>
+        <div class="plan-title">${p.title}</div>
+      </div>
+    `).join('');
 
   return `
     <div class="planner-stat-row">⏱️ 오늘 순공: <b>${formatSeconds(todaySecs)}</b></div>
     <div class="planner-stat-row">✅ 오늘 달성률: <b>${todayDone} / ${todayPlans.length}</b></div>
-    ${ddayBadges}
+    ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
   `;
 }
 
@@ -2382,11 +2387,22 @@ window.submitStudentQuestion = async function(studentId){
   const input = document.getElementById('studentQuestionInput');
   const text = input.value.trim();
   if(!text) return;
-  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null });
+  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null, askedBy: 'student' });
   await saveQuestions(studentId);
   updateQnaBadges();
   input.value = '';
   renderStudentViewForId(studentId);
+};
+
+window.submitParentQuestion = async function(studentId){
+  const input = document.getElementById('parentQuestionInput');
+  const text = input.value.trim();
+  if(!text) return;
+  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null, askedBy: 'parent' });
+  await saveQuestions(studentId);
+  updateQnaBadges();
+  input.value = '';
+  renderParentViewForId(studentId);
 };
 
 function studentQnaListHtml(studentId){
@@ -2394,7 +2410,10 @@ function studentQnaListHtml(studentId){
   if(mine.length === 0) return '<div class="sched-empty">아직 남긴 질문이 없습니다.</div>';
   return mine.map(q => `
     <div class="qna-item">
-      <div class="qna-top"><span class="qna-date">${q.date}</span></div>
+      <div class="qna-top">
+        <span class="qna-asker">${q.askedBy === 'parent' ? '👨‍👩‍👧 학부모 상담' : '🙋 학생 질문'}</span>
+        <span class="qna-date">${q.date}</span>
+      </div>
       <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
       <div class="qna-question">${q.text}</div>
       ${q.answer ? `<div class="qna-answer-display">👩‍🏫 ${q.answer}</div>` : ''}
@@ -2427,6 +2446,7 @@ window.renderQnaTeacherList = function(){
       <div class="qna-item">
         <div class="qna-top">
           <span class="qna-student">${who}</span>
+          <span class="qna-asker">${q.askedBy === 'parent' ? '👨‍👩‍👧 학부모' : '🙋 학생'}</span>
           <span class="qna-date">${q.date}</span>
         </div>
         <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
@@ -3083,7 +3103,6 @@ function renderParentViewForId(studentId){
   const student = students.find(s => s.id === studentId);
   if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
-  const todayRec = records[studentId + ':' + todayKey] || {};
   const dates = last14Dates();
   let presentCount = 0, hwGoodCount = 0, checkedDays = 0;
   dates.forEach(d => {
@@ -3103,13 +3122,6 @@ function renderParentViewForId(studentId){
   }).join('');
 
   summary.innerHTML = `
-    <div class="today-status">
-      <div class="status-card">
-        <div class="label">오늘 숙제</div>
-        <span class="badge ${statusClass(todayRec.hw)}">${statusLabel(todayRec.hw,'hw')}</span>
-      </div>
-    </div>
-
     <div class="settings-card">
       <h3 style="margin:0 0 4px;">🗓️ ${student.name} 플래너</h3>
       ${parentPlannerHtml(studentId)}
@@ -3117,11 +3129,6 @@ function renderParentViewForId(studentId){
 
     <div class="settings-card">
       ${parentReportHtml(studentId)}
-    </div>
-
-    <div class="hw-card">
-      <label>📅 다가오는 일정</label>
-      <div style="margin-top:8px;">${studentScheduleHtml(studentId)}</div>
     </div>
 
     <div class="stat-grid">
@@ -3140,6 +3147,16 @@ function renderParentViewForId(studentId){
     </div>
 
     ${classCommentsForStudentHtml(studentId)}
+
+    <div class="hw-card">
+      <label>💬 질문 및 상담</label>
+      <div class="settings-desc" style="margin-bottom:10px;">선생님께 궁금한 점이나 상담하고 싶은 내용을 남겨주세요.</div>
+      <div class="qna-ask-row">
+        <textarea id="parentQuestionInput" placeholder="선생님께 궁금한 점을 남겨보세요."></textarea>
+        <button class="qna-answer-btn" onclick="submitParentQuestion('${studentId}')">등록</button>
+      </div>
+      <div id="parentQnaList" style="margin-top:12px;">${studentQnaListHtml(studentId)}</div>
+    </div>
 
     <div class="hw-card">
       <label>최근 14일 출석 기록</label>
@@ -3181,7 +3198,9 @@ function renderStudentViewForId(studentId){
   const student = students.find(s => s.id === studentId);
   if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
-  const ddayBadges = ddayBadgesHtml(studentId);
+  const dday = studentDDay[studentId];
+  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
+  const ddayLine = ddayText(effectiveDday);
 
   summary.innerHTML = `
     <div class="hw-card">
@@ -3192,8 +3211,15 @@ function renderStudentViewForId(studentId){
     ${studentCalDayPanelHtml(studentId)}
 
     <div class="hw-card">
-      <label>📆 D-Day</label>
-      <div style="margin-top:10px;">${ddayBadges || '<div class="sched-empty">선생님이 아직 D-Day를 설정하지 않았습니다.</div>'}</div>
+      <label>📆 내 D-Day 설정</label>
+      <div class="settings-field" style="margin-top:10px;">
+        <input id="myDdayTitle_${studentId}" type="text" placeholder="예: 1학기 중간고사" value="${dday ? dday.title : ''}">
+      </div>
+      <div class="settings-field">
+        <input id="myDdayDate_${studentId}" type="date" value="${dday ? dday.date : ''}">
+      </div>
+      <button class="settings-save-btn" style="width:100%; background:var(--good); text-align:center;" onclick="saveMyDday('${studentId}')">D-Day 저장</button>
+      ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
     </div>
 
     ${classCommentsForStudentHtml(studentId)}
@@ -3221,6 +3247,20 @@ function renderStudentViewForId(studentId){
   renderTimerDisplay();
   renderSessions();
 }
+
+window.saveMyDday = async function(studentId){
+  const titleEl = document.getElementById('myDdayTitle_' + studentId);
+  const dateEl = document.getElementById('myDdayDate_' + studentId);
+  const title = titleEl.value.trim();
+  const date = dateEl.value;
+  if(title && date){
+    studentDDay[studentId] = { title, date };
+  } else {
+    delete studentDDay[studentId];
+  }
+  await saveStudentDDay(studentId);
+  renderStudentViewForId(studentId);
+};
 
 function escapeHtml(str){
   return String(str || '').replace(/[&<>"']/g, ch => ({
