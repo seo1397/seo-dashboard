@@ -2,8 +2,19 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>출결부 — 수학 클래스 관리</title>
+
+<!-- PWA: 홈 화면에 앱처럼 설치하기 위한 설정 -->
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#4A8FB5">
+<link rel="icon" href="/icons/icon-192.png">
+
+<!-- iOS(아이폰) 홈 화면 추가 지원 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Inner Leader">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
 <style>
   @import url('https://cdnjs.cloudflare.com/ajax/libs/Pretendard/1.3.9/static/pretendard.css');
 
@@ -527,7 +538,7 @@
       <div class="brand-wordmark">Inner Leader</div>
       <div class="brand-tagline-text">원장님 전용 관리 시스템</div>
     </div>
-    <div class="login-card">
+    <div class="login-card" id="teacherLoginCard">
       <h2>원장 로그인</h2>
       <div class="login-field">
         <label>아이디</label>
@@ -540,6 +551,21 @@
       <div class="login-error" id="loginError"></div>
       <button class="login-btn" onclick="handleTeacherLogin()">로그인</button>
       <div class="login-hint" id="loginHint"></div>
+      <div style="margin-top:16px; text-align:center; font-size:12.5px; color:var(--ink-soft); cursor:pointer;" onclick="showAccessLogin()">학생·학부모이신가요? 여기를 눌러 로그인하세요 →</div>
+    </div>
+    <div class="login-card" id="accessLoginCard" style="display:none;">
+      <h2>학생·학부모 로그인</h2>
+      <div class="login-field">
+        <label>아이디</label>
+        <input id="accessLoginId" type="text" autocomplete="username" placeholder="선생님께 받은 아이디를 입력하세요">
+      </div>
+      <div class="login-field">
+        <label>비밀번호</label>
+        <input id="accessLoginPw" type="password" autocomplete="current-password" placeholder="선생님께 받은 비밀번호를 입력하세요">
+      </div>
+      <div class="login-error" id="accessLoginError"></div>
+      <button class="login-btn" onclick="handleAccessLogin()">로그인</button>
+      <div style="margin-top:16px; text-align:center; font-size:12.5px; color:var(--ink-soft); cursor:pointer;" onclick="showTeacherLogin()">← 원장 로그인으로 돌아가기</div>
     </div>
   </div>
 </div>
@@ -712,7 +738,6 @@
   </table>
   <div class="new-row" id="newRowForm" style="display:none; border-radius:0 0 10px 10px; border-left:1px solid var(--line); border-right:1px solid var(--line); border-bottom:1px solid var(--line);">
     <input id="newName" type="text" placeholder="학생 이름">
-    <input id="newPin" type="text" inputmode="numeric" maxlength="4" placeholder="PIN(선택, 4자리)" style="max-width:130px;">
     <button id="addStudentBtn">추가</button>
   </div>
 
@@ -923,20 +948,11 @@
 <div class="toast" id="toast"></div>
 
 <script>
-  // 학생/학부모 공유 링크(?student=...)로 접속하면 원장 로그인 화면이나
-  // 관리자용 사이드바·홈 화면이 잠깐이라도 보이지 않도록, 무거운 스크립트가
-  // 로드되기 전에 먼저 화면을 결정합니다.
+  // 학생/학부모는 이제 공용 로그인 페이지에서 아이디·비밀번호로 로그인하므로,
+  // 항상 원장 로그인 화면을 기본으로 보여줍니다.
   (function(){
-    var params = new URLSearchParams(window.location.search);
-    var locked = params.get('student');
-    document.getElementById('loginScreen').style.display = locked ? 'none' : 'flex';
-    document.getElementById('appShell').style.display = locked ? 'flex' : 'none';
-    if(locked){
-      var sidebarEl = document.getElementById('sidebarNav');
-      if(sidebarEl) sidebarEl.style.display = 'none';
-      var homeEl = document.getElementById('homeView');
-      if(homeEl) homeEl.style.display = 'none';
-    }
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('appShell').style.display = 'none';
   })();
 </script>
 
@@ -1069,6 +1085,49 @@ async function publicDocDelete(studentId){
   try{ localStorage.removeItem(LS_PUBLIC_PREFIX + studentId); return true; }catch(e){ return false; }
 }
 
+// ---- 로그인 아이디 인덱스 (login_index 컬렉션) ----
+// "아이디" 하나로 어느 학생의 학생/학부모 계정인지 찾기 위한 작은 매핑 문서입니다.
+// studentId와 role만 담고 있어 민감한 학습 데이터는 노출되지 않습니다.
+const LOGIN_INDEX_COLLECTION = 'login_index';
+const LS_LOGIN_INDEX_PREFIX = 'innerleader_loginidx__';
+
+async function loginIndexGet(loginId){
+  const key = String(loginId).trim().toLowerCase();
+  if(!key) return null;
+  if(db){
+    try{
+      const doc = await db.collection(LOGIN_INDEX_COLLECTION).doc(key).get();
+      return doc.exists ? doc.data() : null;
+    }catch(e){ console.error('로그인 아이디 조회 오류:', e); }
+  }
+  try{
+    const raw = localStorage.getItem(LS_LOGIN_INDEX_PREFIX + key);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+
+async function loginIndexSet(loginId, data){
+  const key = String(loginId).trim().toLowerCase();
+  if(!key) return false;
+  if(db){
+    try{ await db.collection(LOGIN_INDEX_COLLECTION).doc(key).set(data); return true; }
+    catch(e){ console.error('로그인 아이디 저장 오류:', e); }
+  }
+  try{ localStorage.setItem(LS_LOGIN_INDEX_PREFIX + key, JSON.stringify(data)); return true; }
+  catch(e){ return false; }
+}
+
+async function loginIndexDelete(loginId){
+  const key = String(loginId).trim().toLowerCase();
+  if(!key) return false;
+  if(db){
+    try{ await db.collection(LOGIN_INDEX_COLLECTION).doc(key).delete(); return true; }
+    catch(e){ console.error('로그인 아이디 삭제 오류:', e); }
+  }
+  try{ localStorage.removeItem(LS_LOGIN_INDEX_PREFIX + key); return true; }
+  catch(e){ return false; }
+}
+
 // 현재 메모리에 있는 데이터에서 특정 학생 한 명의 몫만 뽑아 "공개용 스냅샷"을 만듭니다.
 // (원장님 모드에서는 students 배열 전체를 순회해 모든 학생 몫을 만들고,
 //  학생/학부모 잠긴 모드에서는 students 배열에 이미 자기 자신 한 명만 들어있으므로
@@ -1095,7 +1154,10 @@ function buildStudentSnapshot(studentId){
   return {
     id: student.id,
     name: student.name,
-    pin: student.pin || null,
+    studentLoginId: student.studentLoginId || null,
+    studentLoginPw: student.studentLoginPw || null,
+    parentLoginId: student.parentLoginId || null,
+    parentLoginPw: student.parentLoginPw || null,
     classId: cid,
     className: cls ? cls.name : null,
     records: rec,
@@ -1177,9 +1239,10 @@ document.getElementById('todayLabel').textContent = todayLabelText;
 const wcDateEl = document.getElementById('wcDate');
 if(wcDateEl) wcDateEl.textContent = todayLabelText + ' · 원장님 환영합니다 👋';
 
-const urlParams = new URLSearchParams(window.location.search);
-const lockedStudentId = urlParams.get('student');
-const lockedRole = urlParams.get('role') === 'student' ? 'student' : 'parent';
+// 학생/학부모는 더 이상 URL(?student=...) 링크가 아니라 공용 로그인 페이지에서
+// 아이디·비밀번호로 로그인하며, 성공 시 아래 두 값이 채워집니다.
+let lockedStudentId = null;
+let lockedRole = 'parent';
 
 let students = [];   // [{id, name}]
 let records = {};    // { "studentId:date": {att: 'good'|'warn'|'absent'|null, hw: 'good'|'warn'|'absent'|null} }
@@ -1211,7 +1274,7 @@ async function loadLockedStudentData(){
   if(!snap){
     students = [];
   } else {
-    students = [{ id: snap.id, name: snap.name, pin: snap.pin || undefined }];
+    students = [{ id: snap.id, name: snap.name, studentLoginId: snap.studentLoginId || undefined, parentLoginId: snap.parentLoginId || undefined }];
     records = snap.records || {};
     homeworkByDate = snap.homeworkByDate || {};
     studentHwItems = snap.studentHwItems || {};
@@ -1429,31 +1492,34 @@ function applyLockedView(){
   const summaryId = lockedRole === 'student' ? 'studentSummary' : 'parentSummary';
 
   if(!student){
-    selectWrap.innerHTML = '<div class="empty">유효하지 않은 링크입니다. 선생님께 새 링크를 요청해주세요.</div>';
+    selectWrap.innerHTML = '<div class="empty">로그인 정보를 확인할 수 없습니다. 다시 로그인해주세요.</div>';
     document.getElementById(summaryId).innerHTML = '';
     return;
   }
 
-  if(student.pin){
-    selectWrap.innerHTML = `
-      <label>PIN 입력</label>
-      <input id="pinGateInput" type="text" inputmode="numeric" maxlength="4" placeholder="4자리 PIN" style="width:100%; border:none; font-size:18px; letter-spacing:6px; text-align:center; padding:10px 0; border-bottom:1px solid var(--line); outline:none; background:transparent;">
-      <div class="save-msg" id="pinGateMsg"></div>
-      <button class="add-btn" style="margin-top:10px;" onclick="checkPinGate('${student.id}','${student.pin}')">확인</button>
-    `;
-    document.getElementById(summaryId).innerHTML = '';
-    setTimeout(() => {
-      const el = document.getElementById('pinGateInput');
-      if(el){
-        el.focus();
-        el.addEventListener('keydown', e => { if(e.key === 'Enter') checkPinGate(student.id, student.pin); });
-      }
-    }, 30);
-  } else {
-    selectWrap.innerHTML = '<label>학생</label><div class="locked-name">' + student.name + '</div>';
-    renderLockedContent(lockedStudentId);
-  }
+  selectWrap.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <label>학생</label>
+        <div class="locked-name">${student.name}</div>
+      </div>
+      <div style="font-size:12px; color:var(--ink-soft); cursor:pointer;" onclick="handleAccessLogout()">로그아웃</div>
+    </div>
+  `;
+  renderLockedContent(lockedStudentId);
 }
+
+window.handleAccessLogout = function(){
+  lockedStudentId = null;
+  lockedRole = 'parent';
+  students = [];
+  if(auth) auth.signOut().catch(e => console.error('로그아웃 오류:', e));
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+  const sidebarEl = document.getElementById('sidebarNav');
+  if(sidebarEl) sidebarEl.style.display = '';
+  showAccessLogin();
+};
 
 function renderLockedContent(studentId){
   if(lockedRole === 'student'){
@@ -1462,23 +1528,6 @@ function renderLockedContent(studentId){
     renderParentViewForId(studentId);
   }
 }
-
-window.checkPinGate = function(studentId, correctPin){
-  const el = document.getElementById('pinGateInput');
-  const msg = document.getElementById('pinGateMsg');
-  if(!el) return;
-  if(el.value.trim() === correctPin){
-    const student = students.find(s => s.id === studentId);
-    const wrapId = lockedRole === 'student' ? 'studentSelectWrap' : 'parentSelectWrap';
-    const selectWrap = document.getElementById(wrapId);
-    selectWrap.innerHTML = '<label>학생</label><div class="locked-name">' + student.name + '</div>';
-    renderLockedContent(studentId);
-  } else {
-    msg.textContent = 'PIN이 일치하지 않습니다.';
-    el.value = '';
-    el.focus();
-  }
-};
 
 async function saveStudents(){
   try{
@@ -1571,10 +1620,26 @@ function render(){
       return `<span class="dot ${cls}" title="${d}"></span>`;
     }).join('');
 
-    const pinRow = pendingPinId === st.id
-      ? `<div style="margin-top:6px; display:flex; gap:6px;">
-          <input id="pinInput_${st.id}" type="text" inputmode="numeric" maxlength="4" placeholder="4자리 PIN" style="width:90px; border:1px solid var(--line); border-radius:6px; padding:4px 8px; font-size:12.5px;">
-          <button class="link-btn" onclick="savePin('${st.id}')">저장</button>
+    const credsRow = pendingCredsId === st.id
+      ? `<div class="creds-form" style="margin-top:8px; display:flex; flex-direction:column; gap:6px; max-width:280px;">
+          <div style="font-size:11px; font-weight:800; color:var(--ink-soft);">🙋 학생 계정</div>
+          <div style="display:flex; gap:6px;">
+            <input id="studentLoginId_${st.id}" type="text" placeholder="학생 아이디" value="${st.studentLoginId || ''}" style="flex:1; min-width:0; border:1px solid var(--line); border-radius:6px; padding:4px 8px; font-size:12.5px;">
+            <input id="studentLoginPw_${st.id}" type="text" placeholder="비밀번호" value="${st.studentLoginPw || ''}" style="flex:1; min-width:0; border:1px solid var(--line); border-radius:6px; padding:4px 8px; font-size:12.5px;">
+          </div>
+          <div style="font-size:11px; font-weight:800; color:var(--ink-soft); margin-top:4px;">👨‍👩‍👧 학부모 계정</div>
+          <div style="display:flex; gap:6px;">
+            <input id="parentLoginId_${st.id}" type="text" placeholder="학부모 아이디" value="${st.parentLoginId || ''}" style="flex:1; min-width:0; border:1px solid var(--line); border-radius:6px; padding:4px 8px; font-size:12.5px;">
+            <input id="parentLoginPw_${st.id}" type="text" placeholder="비밀번호" value="${st.parentLoginPw || ''}" style="flex:1; min-width:0; border:1px solid var(--line); border-radius:6px; padding:4px 8px; font-size:12.5px;">
+          </div>
+          <div class="save-msg" id="credsMsg_${st.id}"></div>
+          <button class="link-btn" onclick="saveCreds('${st.id}')">저장</button>
+         </div>`
+      : '';
+
+    const credsSummary = (st.studentLoginId || st.parentLoginId)
+      ? `<div style="font-size:10.5px; color:var(--ink-soft); margin-top:2px;">
+          ${st.studentLoginId ? `🙋 ${st.studentLoginId}` : ''}${(st.studentLoginId && st.parentLoginId) ? ' · ' : ''}${st.parentLoginId ? `👨‍👩‍👧 ${st.parentLoginId}` : ''}
          </div>`
       : '';
 
@@ -1585,13 +1650,11 @@ function render(){
         ${myItems.map(i => `${i.done ? '✅' : '⬜'} ${escapeHtml(i.text)}`).join(' · ')}
       </div>`;
     return `<tr>
-      <td class="name-cell">${st.name}<span class="del" onclick="removeStudent('${st.id}')">${pendingDeleteId === st.id ? '한번 더 탭하면 삭제됨' : '삭제'}</span><span class="del" onclick="setPin('${st.id}')">${st.pin ? 'PIN 변경' : 'PIN 설정'}</span>${pinRow}${myHwNote}</td>
+      <td class="name-cell">${st.name}<span class="del" onclick="removeStudent('${st.id}')">${pendingDeleteId === st.id ? '한번 더 탭하면 삭제됨' : '삭제'}</span><span class="del" onclick="setCreds('${st.id}')">계정 설정</span>${credsSummary}${credsRow}${myHwNote}</td>
       <td><div class="pill-group">${attPills}</div></td>
       <td><div class="pill-group">${hwPills}</div></td>
       <td><div class="history">${dots}</div></td>
       <td style="display:flex; flex-direction:column; gap:5px;">
-        <button class="link-btn" style="border-color:#6B4FA0; color:#6B4FA0;" onclick="copyParentLink('${st.id}','${st.name}')">학부모 링크</button>
-        <button class="link-btn" style="border-color:#4A8FB5; color:#4A8FB5;" onclick="copyStudentLink('${st.id}','${st.name}')">학생 링크</button>
         <button class="link-btn" style="border-color:#1F5C4D; color:#1F5C4D;" onclick="openPlannerFor('${st.id}')">🗓️ 플래너</button>
       </td>
     </tr>`;
@@ -1607,32 +1670,82 @@ window.setRecord = async function(studentId, field, value){
 };
 
 let pendingDeleteId = null;
-let pendingPinId = null;
+let pendingCredsId = null;
 
-window.setPin = function(id){
-  pendingPinId = pendingPinId === id ? null : id;
+window.setCreds = function(id){
+  pendingCredsId = pendingCredsId === id ? null : id;
   pendingDeleteId = null;
   render();
-  if(pendingPinId){
+  if(pendingCredsId){
     setTimeout(() => {
-      const el = document.getElementById('pinInput_' + id);
+      const el = document.getElementById('studentLoginId_' + id);
       if(el) el.focus();
     }, 30);
   }
 };
 
-window.savePin = async function(id){
-  const el = document.getElementById('pinInput_' + id);
-  const val = el ? el.value.trim() : '';
-  if(!/^\d{4}$/.test(val)){
-    if(el){ el.style.borderColor = 'var(--absent)'; el.placeholder = '숫자 4자리 입력'; el.value=''; }
+window.saveCreds = async function(id){
+  const st = students.find(s => s.id === id);
+  if(!st) return;
+  const msgEl = document.getElementById('credsMsg_' + id);
+  const showMsg = (text) => { if(msgEl){ msgEl.style.color = 'var(--absent)'; msgEl.textContent = text; } };
+
+  const sIdEl = document.getElementById('studentLoginId_' + id);
+  const sPwEl = document.getElementById('studentLoginPw_' + id);
+  const pIdEl = document.getElementById('parentLoginId_' + id);
+  const pPwEl = document.getElementById('parentLoginPw_' + id);
+
+  const newStudentId = sIdEl.value.trim();
+  const newStudentPw = sPwEl.value.trim();
+  const newParentId = pIdEl.value.trim();
+  const newParentPw = pPwEl.value.trim();
+
+  if((newStudentId && !newStudentPw) || (!newStudentId && newStudentPw)){
+    showMsg('학생 아이디와 비밀번호를 함께 입력해주세요.');
     return;
   }
-  const st = students.find(s => s.id === id);
-  if(st) st.pin = val;
-  pendingPinId = null;
+  if((newParentId && !newParentPw) || (!newParentId && newParentPw)){
+    showMsg('학부모 아이디와 비밀번호를 함께 입력해주세요.');
+    return;
+  }
+  if(newStudentId && newParentId && newStudentId.toLowerCase() === newParentId.toLowerCase()){
+    showMsg('학생 아이디와 학부모 아이디는 다르게 설정해주세요.');
+    return;
+  }
+
+  const idInUseElsewhere = (candidateId) => students.some(s =>
+    s.id !== id && (
+      (s.studentLoginId && s.studentLoginId.toLowerCase() === candidateId.toLowerCase()) ||
+      (s.parentLoginId && s.parentLoginId.toLowerCase() === candidateId.toLowerCase())
+    )
+  );
+  if(newStudentId && idInUseElsewhere(newStudentId)){
+    showMsg('이미 사용 중인 아이디입니다 (학생).');
+    return;
+  }
+  if(newParentId && idInUseElsewhere(newParentId)){
+    showMsg('이미 사용 중인 아이디입니다 (학부모).');
+    return;
+  }
+
+  const oldStudentId = st.studentLoginId;
+  const oldParentId = st.parentLoginId;
+
+  if(oldStudentId && oldStudentId !== newStudentId) await loginIndexDelete(oldStudentId);
+  if(oldParentId && oldParentId !== newParentId) await loginIndexDelete(oldParentId);
+
+  st.studentLoginId = newStudentId || null;
+  st.studentLoginPw = newStudentPw || null;
+  st.parentLoginId = newParentId || null;
+  st.parentLoginPw = newParentPw || null;
+
+  if(newStudentId) await loginIndexSet(newStudentId, { studentId: st.id, role: 'student' });
+  if(newParentId) await loginIndexSet(newParentId, { studentId: st.id, role: 'parent' });
+
+  pendingCredsId = null;
   await saveStudents();
   render();
+  showToast(st.name + ' 계정 정보가 저장되었습니다');
 };
 
 window.removeStudent = async function(id){
@@ -1642,9 +1755,14 @@ window.removeStudent = async function(id){
     return;
   }
   pendingDeleteId = null;
+  const st = students.find(s => s.id === id);
   students = students.filter(s => s.id !== id);
   await saveStudents();
   await publicDocDelete(id);
+  if(st){
+    if(st.studentLoginId) await loginIndexDelete(st.studentLoginId);
+    if(st.parentLoginId) await loginIndexDelete(st.parentLoginId);
+  }
   render();
 };
 
@@ -1664,16 +1782,12 @@ function randomIdSuffix(){
 
 async function addStudent(){
   const input = document.getElementById('newName');
-  const pinInput = document.getElementById('newPin');
   const name = input.value.trim();
-  const pin = pinInput.value.trim();
   if(!name) return;
   const student = { id: 's' + Date.now() + '_' + randomIdSuffix(), name };
-  if(pin && /^\d{4}$/.test(pin)) student.pin = pin;
   students.push(student);
   await saveStudents();
   input.value = '';
-  pinInput.value = '';
   render();
 }
 
@@ -2907,6 +3021,11 @@ function classCommentsForStudentHtml(studentId){
   const pwEl = document.getElementById('loginPw');
   if(idEl) idEl.addEventListener('keydown', e => { if(e.key === 'Enter') handleTeacherLogin(); });
   if(pwEl) pwEl.addEventListener('keydown', e => { if(e.key === 'Enter') handleTeacherLogin(); });
+
+  const accIdEl = document.getElementById('accessLoginId');
+  const accPwEl = document.getElementById('accessLoginPw');
+  if(accIdEl) accIdEl.addEventListener('keydown', e => { if(e.key === 'Enter') handleAccessLogin(); });
+  if(accPwEl) accPwEl.addEventListener('keydown', e => { if(e.key === 'Enter') handleAccessLogin(); });
 })();
 
 loadAll();
@@ -3061,10 +3180,85 @@ async function enterApp(){
   setMode('home');
 }
 
+window.showAccessLogin = function(){
+  document.getElementById('teacherLoginCard').style.display = 'none';
+  document.getElementById('accessLoginCard').style.display = '';
+  setTimeout(() => {
+    const el = document.getElementById('accessLoginId');
+    if(el) el.focus();
+  }, 30);
+};
+
+window.showTeacherLogin = function(){
+  document.getElementById('accessLoginCard').style.display = 'none';
+  document.getElementById('teacherLoginCard').style.display = '';
+  const errEl = document.getElementById('accessLoginError');
+  if(errEl) errEl.textContent = '';
+  setTimeout(() => {
+    const el = document.getElementById('loginId');
+    if(el) el.focus();
+  }, 30);
+};
+
+window.handleAccessLogin = async function(){
+  const idEl = document.getElementById('accessLoginId');
+  const pwEl = document.getElementById('accessLoginPw');
+  const errEl = document.getElementById('accessLoginError');
+  const id = idEl.value.trim();
+  const pw = pwEl.value;
+  errEl.textContent = '';
+
+  if(!id || !pw){
+    errEl.textContent = '아이디와 비밀번호를 모두 입력해주세요.';
+    return;
+  }
+  if(!auth){
+    errEl.textContent = '로그인 기능을 사용할 수 없습니다. 인터넷 연결을 확인해주세요.';
+    return;
+  }
+
+  try{
+    await auth.signInAnonymously();
+  }catch(e){
+    console.error('학생/학부모 익명 로그인 오류:', e);
+    errEl.textContent = '로그인 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+    return;
+  }
+
+  let entry = null;
+  try{
+    entry = await loginIndexGet(id);
+  }catch(e){ console.error('로그인 아이디 조회 오류:', e); }
+
+  if(!entry || !entry.studentId || (entry.role !== 'student' && entry.role !== 'parent')){
+    errEl.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.';
+    return;
+  }
+
+  const snap = await publicDocGet(entry.studentId);
+  const correctPw = snap ? (entry.role === 'parent' ? snap.parentLoginPw : snap.studentLoginPw) : null;
+
+  if(!snap || !correctPw || pw !== correctPw){
+    errEl.textContent = '아이디 또는 비밀번호가 일치하지 않습니다.';
+    pwEl.value = '';
+    return;
+  }
+
+  lockedStudentId = entry.studentId;
+  lockedRole = entry.role;
+  idEl.value = '';
+  pwEl.value = '';
+  await loadLockedStudentData();
+};
+
 window.handleTeacherLogout = function(){
   if(auth) auth.signOut().catch(e => console.error('로그아웃 오류:', e));
   document.getElementById('appShell').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
+  const teacherCard = document.getElementById('teacherLoginCard');
+  const accessCard = document.getElementById('accessLoginCard');
+  if(teacherCard) teacherCard.style.display = '';
+  if(accessCard) accessCard.style.display = 'none';
   const errEl = document.getElementById('loginError');
   if(errEl) errEl.textContent = '';
   const idEl = document.getElementById('loginId');
@@ -3319,50 +3513,20 @@ window.timerReset = function(){
   renderSessions();
 };
 
-window.copyStudentLink = function(studentId, studentName){
-  const url = new URL(window.location.href);
-  url.search = '';
-  url.searchParams.set('student', studentId);
-  url.searchParams.set('role', 'student');
-  const link = url.toString();
-  const showToast = (msg) => {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2200);
-  };
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(link).then(
-      () => showToast(studentName + ' 학생 링크가 복사되었습니다'),
-      () => showToast(link)
-    );
-  } else {
-    showToast(link);
-  }
-};
+function showToast(msg){
+  const t = document.getElementById('toast');
+  if(!t) return;
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
 
-window.copyParentLink = function(studentId, studentName){
-  const url = new URL(window.location.href);
-  url.search = '';
-  url.searchParams.set('student', studentId);
-  const link = url.toString();
-
-  const showToast = (msg) => {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 2200);
-  };
-
-  if(navigator.clipboard && navigator.clipboard.writeText){
-    navigator.clipboard.writeText(link).then(
-      () => showToast(studentName + ' 학부모 링크가 복사되었습니다'),
-      () => showToast(link)
-    );
-  } else {
-    showToast(link);
-  }
-};
+// PWA: 서비스워커 등록 (홈 화면 앱 설치를 지원하기 위함)
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(e => console.warn('서비스워커 등록 실패:', e));
+  });
+}
 </script>
 </body>
 </html>
