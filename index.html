@@ -1239,6 +1239,22 @@ document.getElementById('todayLabel').textContent = todayLabelText;
 const wcDateEl = document.getElementById('wcDate');
 if(wcDateEl) wcDateEl.textContent = todayLabelText + ' · 원장님 환영합니다 👋';
 
+// 학생/학부모가 숙제를 체크할 수 있는 "실질적인 오늘" 날짜를 계산합니다.
+// 자정이 지나도 새벽 5시 전까지는 전날 숙제를 계속 체크할 수 있도록 하루 경계를 새벽 5시로 둡니다.
+function getStudentEffectiveDate(){
+  const now = new Date();
+  const cutoffHour = 5;
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if(now.getHours() < cutoffHour) d.setDate(d.getDate() - 1);
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,'0');
+  const day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+
+// 학생 전용 화면(학생/학부모 공용)에서 현재 보고 있는 "역할" — renderPersonView 호출 시 설정됩니다.
+let currentPersonRole = 'student';
+
 // 학생/학부모는 더 이상 URL(?student=...) 링크가 아니라 공용 로그인 페이지에서
 // 아이디·비밀번호로 로그인하며, 성공 시 아래 두 값이 채워집니다.
 let lockedStudentId = null;
@@ -1522,11 +1538,7 @@ window.handleAccessLogout = function(){
 };
 
 function renderLockedContent(studentId){
-  if(lockedRole === 'student'){
-    renderStudentViewForId(studentId);
-  } else {
-    renderParentViewForId(studentId);
-  }
+  renderPersonView(studentId, lockedRole);
 }
 
 async function saveStudents(){
@@ -1987,9 +1999,9 @@ function studentScheduleHtml(studentId){
   }).join('') + '</div>';
 }
 
-// ---- Student calendar (숙제+일정 통합, 학생 전용 앱) ----
-let studentCalMonth = todayKey.slice(0,7); // 'YYYY-MM'
-let studentCalDate  = todayKey;            // 'YYYY-MM-DD'
+// ---- 날짜별 숙제 확인 (학생/학부모 공용) ----
+let studentCalMonth = getStudentEffectiveDate().slice(0,7); // 'YYYY-MM'
+let studentCalDate  = getStudentEffectiveDate();            // 'YYYY-MM-DD'
 
 function calShiftMonth(ym, delta){
   const [y,m] = ym.split('-').map(Number);
@@ -2005,48 +2017,31 @@ function calFirstWeekday(ym){
   return new Date(y, m - 1, 1).getDay(); // 0=Sun
 }
 
-function studentDayHasEvents(studentId, dateStr){
-  const hasSched = schedule.some(ev => (ev.studentId === studentId || ev.studentId === 'all') && ev.date === dateStr);
-  const hasHw = (studentHwItems[studentId + ':' + dateStr] || []).length > 0
-    || homeworkItems.some(i => i.date === dateStr)
-    || (dateStr === todayKey && !!homeworkByDate[todayKey]);
-  return { hasSched, hasHw };
-}
-
 window.studentCalNav = function(studentId, delta){
   studentCalMonth = calShiftMonth(studentCalMonth, delta);
-  renderStudentViewForId(studentId);
+  const daysInNewMonth = calDaysInMonth(studentCalMonth);
+  const keepDay = Math.min(Number(studentCalDate.slice(8,10)), daysInNewMonth);
+  studentCalDate = studentCalMonth + '-' + String(keepDay).padStart(2,'0');
+  renderPersonView(studentId, currentPersonRole);
 };
 window.studentCalToday = function(studentId){
-  studentCalMonth = todayKey.slice(0,7);
-  studentCalDate = todayKey;
-  renderStudentViewForId(studentId);
+  const eff = getStudentEffectiveDate();
+  studentCalMonth = eff.slice(0,7);
+  studentCalDate = eff;
+  renderPersonView(studentId, currentPersonRole);
 };
 window.studentCalSelect = function(studentId, dateStr){
   studentCalDate = dateStr;
-  renderStudentViewForId(studentId);
+  renderPersonView(studentId, currentPersonRole);
 };
 
-function studentCalendarHtml(studentId){
-  const ym = studentCalMonth;
-  const [y,m] = ym.split('-').map(Number);
-  const days = calDaysInMonth(ym);
-  const firstWd = calFirstWeekday(ym);
-  const weekdays = ['일','월','화','수','목','금','토'];
-
-  let cells = '';
-  for(let i = 0; i < firstWd; i++) cells += `<div class="cal-cell empty"></div>`;
-  for(let d = 1; d <= days; d++){
-    const dateStr = `${ym}-${pad(d)}`;
-    const { hasSched, hasHw } = studentDayHasEvents(studentId, dateStr);
-    const isToday = dateStr === todayKey;
-    const isSelected = dateStr === studentCalDate;
-    const dots = `${hasSched ? '<span class="cal-dot sched"></span>' : ''}${hasHw ? '<span class="cal-dot hw"></span>' : ''}`;
-    cells += `<div class="cal-cell ${isToday ? 'today' : ''} ${isSelected ? 'selected' : ''}" onclick="studentCalSelect('${studentId}','${dateStr}')">
-      <span class="cal-daynum">${d}</span>
-      <span class="cal-dots">${dots}</span>
-    </div>`;
-  }
+// 달력 그리드 대신 "월 이동 + 날짜 선택" 방식으로 원하는 날짜의 숙제를 찾습니다.
+function studentDateNavHtml(studentId){
+  const [y,m] = studentCalMonth.split('-').map(Number);
+  const daysInMonth = calDaysInMonth(studentCalMonth);
+  const selectedDay = Number(studentCalDate.slice(8,10));
+  const dayOptions = Array.from({length:daysInMonth}, (_,i) => i+1)
+    .map(d => `<option value="${d}" ${d===selectedDay ? 'selected' : ''}>${d}일</option>`).join('');
 
   return `
     <div class="cal-nav">
@@ -2054,15 +2049,21 @@ function studentCalendarHtml(studentId){
       <span class="cal-label">${y}년 ${m}월</span>
       <span class="cal-nav-btn" onclick="studentCalNav('${studentId}',1)">▶</span>
     </div>
-    <div class="cal-today-row"><span class="cal-today-btn" onclick="studentCalToday('${studentId}')">오늘로</span></div>
-    <div class="cal-grid cal-weekdays">${weekdays.map(w => `<div class="cal-wd">${w}</div>`).join('')}</div>
-    <div class="cal-grid">${cells}</div>
+    <div style="display:flex; gap:8px; align-items:center; margin-top:10px;">
+      <select onchange="studentCalSelect('${studentId}', '${studentCalMonth}-' + String(this.value).padStart(2,'0'))" style="flex:1; border:1px solid var(--line); border-radius:8px; padding:9px 10px; font-family:inherit; font-size:13.5px; color:var(--ink); background:#fff;">
+        ${dayOptions}
+      </select>
+      <span class="cal-today-btn" onclick="studentCalToday('${studentId}')">오늘로</span>
+    </div>
   `;
 }
 
-function studentCalDayPanelHtml(studentId){
+// roleEditable: 이 역할(학생=true, 학부모=false)이 숙제를 직접 조작할 수 있는지 여부.
+// 실제 편집 가능 여부는 "오늘(실질적인 오늘, 새벽 5시 기준)" + roleEditable을 모두 만족해야 합니다.
+function studentCalDayPanelHtml(studentId, roleEditable){
   const dateStr = studentCalDate;
-  const isToday = dateStr === todayKey;
+  const isToday = dateStr === getStudentEffectiveDate();
+  const canEdit = isToday && roleEditable;
   const md = dateStr.slice(5).replace('-', '.');
 
   const evs = schedule.filter(ev => (ev.studentId === studentId || ev.studentId === 'all') && ev.date === dateStr);
@@ -2087,10 +2088,10 @@ function studentCalDayPanelHtml(studentId){
       ${teacherHwHtml}
     </div>
     <div class="student-hw-card">
-      <div class="hw-label">✍️ ${md} 숙제 목록${!isToday ? ' (읽기 전용)' : ''}</div>
-      <div style="margin-top:8px;">${studentHwListHtml(studentId, isToday, dateStr)}</div>
+      <div class="hw-label">✍️ ${md} 숙제 목록${!canEdit ? ' (읽기 전용)' : ''}</div>
+      <div style="margin-top:8px;">${studentHwListHtml(studentId, canEdit, dateStr)}</div>
     </div>
-    ${hwChecklistStudentHtmlForDate(studentId, dateStr, isToday)}
+    ${hwChecklistStudentHtmlForDate(studentId, dateStr, canEdit)}
   `;
 }
 
@@ -2221,32 +2222,6 @@ window.deleteTestScore = async function(id){
   const sel = document.getElementById('reportStudentSelect');
   if(sel && sel.value) renderReportForStudent(sel.value);
 };
-
-function parentReportHtml(studentId){
-  const { last7, last14 } = studentStudyTimeSummary(studentId);
-  const progress = progressByStudent[studentId] || '아직 등록된 진도 내용이 없습니다.';
-
-  return `
-    <div class="report-title">📊 ${students.find(s=>s.id===studentId)?.name || ''} 학생 리포트</div>
-    <div class="report-sub">학부모님께만 표시되는 화면입니다.</div>
-
-    <div class="home-stat-row" style="margin-top:12px;">
-      <div class="home-stat">
-        <div class="hs-value">${formatSeconds(last7).slice(0,5)}</div>
-        <div class="hs-label">최근 7일 순공시간</div>
-      </div>
-      <div class="home-stat">
-        <div class="hs-value">${formatSeconds(last14).slice(0,5)}</div>
-        <div class="hs-label">최근 14일 순공시간</div>
-      </div>
-    </div>
-
-    <div class="settings-field" style="margin-bottom:0;">
-      <label>📈 학습 진도</label>
-      <div class="hw-text-display">${progress}</div>
-    </div>
-  `;
-}
 
 // ---- Student planner ----
 async function saveDefaultDday(){
@@ -2442,39 +2417,6 @@ window.deletePlanEntry = async function(id){
   if(entry) renderPlannerForStudent(entry.studentId);
 };
 
-function parentPlannerHtml(studentId){
-  if(!parentVisible[studentId]){
-    return '<div class="sched-empty">🔒 선생님이 아직 플래너 공개를 설정하지 않았습니다.</div>';
-  }
-  const { last7 } = studentStudyTimeSummary(studentId);
-  const todaySecs = studyTimeByDate[studentId + ':' + todayKey] || 0;
-  const todayPlans = planEntries.filter(p => p.studentId === studentId && p.date === todayKey);
-  const todayDone = todayPlans.filter(p => p.done).length;
-  const dday = studentDDay[studentId];
-  const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
-  const ddayLine = ddayText(effectiveDday);
-
-  const weekDates = getWeekRange();
-  const weekPlans = planEntries
-    .filter(p => p.studentId === studentId && weekDates.includes(p.date))
-    .sort((a,b) => a.date.localeCompare(b.date));
-  const weekListHtml = weekPlans.length === 0
-    ? '<div class="sched-empty">이번 주 작성된 계획이 없습니다.</div>'
-    : weekPlans.map(p => `
-      <div class="plan-item ${p.done ? 'done' : ''}">
-        <span style="width:19px; flex-shrink:0; text-align:center;">${p.done ? '✅' : '⬜'}</span>
-        <div class="plan-date">${p.date.slice(5).replace('-','.')}</div>
-        <div class="plan-title">${p.title}</div>
-      </div>
-    `).join('');
-
-  return `
-    <div class="planner-stat-row">⏱️ 오늘 순공: <b>${formatSeconds(todaySecs)}</b></div>
-    <div class="planner-stat-row">✅ 오늘 달성률: <b>${todayDone} / ${todayPlans.length}</b></div>
-    ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
-  `;
-}
-
 // ---- Q&A ----
 async function saveQuestions(studentId){
   try{
@@ -2497,26 +2439,18 @@ function updateQnaBadges(){
   }
 }
 
-window.submitStudentQuestion = async function(studentId){
-  const input = document.getElementById('studentQuestionInput');
+// 학생/학부모 공용 질문 등록 (askedBy: 'student' | 'parent')
+window.submitPersonQuestion = async function(studentId, askedBy){
+  const inputId = askedBy === 'parent' ? 'parentQuestionInput' : 'studentQuestionInput';
+  const input = document.getElementById(inputId);
+  if(!input) return;
   const text = input.value.trim();
   if(!text) return;
-  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null, askedBy: 'student' });
+  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null, askedBy });
   await saveQuestions(studentId);
   updateQnaBadges();
   input.value = '';
-  renderStudentViewForId(studentId);
-};
-
-window.submitParentQuestion = async function(studentId){
-  const input = document.getElementById('parentQuestionInput');
-  const text = input.value.trim();
-  if(!text) return;
-  questions.push({ id: 'q' + Date.now(), studentId, text, answer: null, date: todayKey, answeredAt: null, askedBy: 'parent' });
-  await saveQuestions(studentId);
-  updateQnaBadges();
-  input.value = '';
-  renderParentViewForId(studentId);
+  renderPersonView(studentId, askedBy);
 };
 
 function studentQnaListHtml(studentId){
@@ -2668,7 +2602,7 @@ window.toggleHwItemCheck = async function(studentId, itemId){
   await saveRecords(studentId);
   renderHwItemList();
   render();
-  renderStudentViewForId(studentId);
+  renderPersonView(studentId, currentPersonRole);
 };
 
 function hwChecklistStudentHtml(studentId){
@@ -2697,44 +2631,25 @@ function hwChecklistStudentHtmlForDate(studentId, date, editable){
   `;
 }
 
-function hwChecklistParentHtml(studentId){
-  const items = todaysHomeworkItems();
-  if(items.length === 0) return '';
-  return `
-    <div class="settings-field" style="margin-top:14px; margin-bottom:0;">
-      <label>✅ 오늘 숙제 체크리스트</label>
-      <div class="sched-list">
-        ${items.map(item => {
-          const checked = !!homeworkItemChecks[studentId + ':' + item.id];
-          return `<div class="plan-item ${checked ? 'done' : ''}">
-            <span style="width:19px; flex-shrink:0; text-align:center;">${checked ? '✅' : '⬜'}</span>
-            <div class="plan-title">${item.text}</div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
-  `;
-}
-
 // ---- 학생이 직접 적는 숙제 목록 (날짜별, 학생/원장님/학부모 모두에게 보임) ----
 function studentHwItemsForDate(studentId, date){
   return studentHwItems[studentId + ':' + date] || [];
 }
 function todaysStudentHwItems(studentId){
-  return studentHwItemsForDate(studentId, todayKey);
+  return studentHwItemsForDate(studentId, getStudentEffectiveDate());
 }
 
 function recomputeStudentHwStatus(studentId){
   const items = todaysStudentHwItems(studentId);
   if(items.length === 0) return; // 학생이 적은 항목이 없으면 기존 상태를 건드리지 않습니다
   const doneCount = items.filter(i => i.done).length;
-  const key = studentId + ':' + todayKey;
+  const key = studentId + ':' + getStudentEffectiveDate();
   if(!records[key]) records[key] = {};
   records[key].hw = doneCount === items.length ? 'good' : doneCount > 0 ? 'warn' : null;
 }
 
 window.addStudentHwItem = async function(studentId, date){
-  date = date || todayKey;
+  date = date || getStudentEffectiveDate();
   const input = document.getElementById('myHwItemInput_' + studentId + '_' + date);
   if(!input) return;
   const text = input.value.trim();
@@ -2744,39 +2659,39 @@ window.addStudentHwItem = async function(studentId, date){
   studentHwItems[key].push({ id: 'shw' + Date.now(), text, done:false });
   await saveStudentHwItems(studentId);
   input.value = '';
-  renderStudentViewForId(studentId);
+  renderPersonView(studentId, currentPersonRole);
 };
 
 window.toggleStudentHwItem = async function(studentId, itemId, date){
-  date = date || todayKey;
+  date = date || getStudentEffectiveDate();
   const key = studentId + ':' + date;
   const items = studentHwItems[key] || [];
   const item = items.find(i => i.id === itemId);
   if(!item) return;
   item.done = !item.done;
   await saveStudentHwItems(studentId);
-  if(date === todayKey){
+  if(date === getStudentEffectiveDate()){
     recomputeStudentHwStatus(studentId);
     await saveRecords(studentId);
   }
-  renderStudentViewForId(studentId);
+  renderPersonView(studentId, currentPersonRole);
 };
 
 window.deleteStudentHwItem = async function(studentId, itemId, date){
-  date = date || todayKey;
+  date = date || getStudentEffectiveDate();
   const key = studentId + ':' + date;
   studentHwItems[key] = (studentHwItems[key] || []).filter(i => i.id !== itemId);
   await saveStudentHwItems(studentId);
-  if(date === todayKey){
+  if(date === getStudentEffectiveDate()){
     recomputeStudentHwStatus(studentId);
     await saveRecords(studentId);
   }
-  renderStudentViewForId(studentId);
+  renderPersonView(studentId, currentPersonRole);
 };
 
-// editable=true: 체크박스+삭제+추가 입력창 (학생 화면, 오늘만). editable=false: 읽기 전용 (원장님/학부모 화면, 과거 날짜).
+// editable=true: 체크박스+삭제+추가 입력창 (학생 화면, 오늘만). editable=false: 읽기 전용 (원장님/학부모 화면, 또는 과거 날짜).
 function studentHwListHtml(studentId, editable, date){
-  date = date || todayKey;
+  date = date || getStudentEffectiveDate();
   const items = studentHwItemsForDate(studentId, date);
   const listHtml = items.length === 0
     ? `<div class="sched-empty">${editable ? '아직 추가한 숙제가 없습니다. 아래에서 추가해보세요.' : '학생이 적은 숙제가 없습니다.'}</div>`
@@ -3289,74 +3204,7 @@ window.renderParentView = function(){
     return;
   }
   const studentId = sel ? (sel.value || students[0].id) : students[0].id;
-  renderParentViewForId(studentId);
-};
-
-function renderParentViewForId(studentId){
-  const summary = document.getElementById('parentSummary');
-  const student = students.find(s => s.id === studentId);
-  if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
-
-  const dates = last14Dates();
-  let presentCount = 0, hwGoodCount = 0, checkedDays = 0;
-  dates.forEach(d => {
-    const r = records[studentId + ':' + d];
-    if(r && r.att){
-      checkedDays++;
-      if(r.att === 'good') presentCount++;
-    }
-    if(r && r.hw === 'good') hwGoodCount++;
-  });
-  const attRate = checkedDays ? Math.round(presentCount / checkedDays * 100) : 0;
-
-  const dots = dates.map(d => {
-    const r = records[studentId + ':' + d];
-    const cls = r && r.att ? r.att : '';
-    return `<span class="dot ${cls}" title="${d}"></span>`;
-  }).join('');
-
-  summary.innerHTML = `
-    <div class="settings-card">
-      <h3 style="margin:0 0 4px;">🗓️ ${student.name} 플래너</h3>
-      ${parentPlannerHtml(studentId)}
-    </div>
-
-    <div class="settings-card">
-      ${parentReportHtml(studentId)}
-    </div>
-
-    <div class="stat-grid">
-      <div class="stat-box">
-        <div class="stat-label">최근 14일 숙제 완료</div>
-        <div class="stat-value ${hwGoodCount >= 10 ? 'good' : 'warn'}">${hwGoodCount}일</div>
-      </div>
-    </div>
-
-    <div class="hw-card">
-      <label>오늘의 숙제 내용</label>
-      <div class="hw-text-display">${homeworkByDate[todayKey] ? homeworkByDate[todayKey] : '선생님이 등록한 숙제가 없습니다.'}</div>
-      <div style="font-size:11.5px; font-weight:700; color:var(--ink-soft); margin-top:14px; margin-bottom:8px;">✍️ 우리 아이가 적은 오늘의 숙제</div>
-      <div style="margin-top:8px;">${studentHwListHtml(studentId, false)}</div>
-      ${hwChecklistParentHtml(studentId)}
-    </div>
-
-    ${classCommentsForStudentHtml(studentId)}
-
-    <div class="hw-card">
-      <label>💬 질문 및 상담</label>
-      <div class="settings-desc" style="margin-bottom:10px;">선생님께 궁금한 점이나 상담하고 싶은 내용을 남겨주세요.</div>
-      <div class="qna-ask-row">
-        <textarea id="parentQuestionInput" placeholder="선생님께 궁금한 점을 남겨보세요."></textarea>
-        <button class="qna-answer-btn" onclick="submitParentQuestion('${studentId}')">등록</button>
-      </div>
-      <div id="parentQnaList" style="margin-top:12px;">${studentQnaListHtml(studentId)}</div>
-    </div>
-
-    <div class="hw-card">
-      <label>최근 14일 출석 기록</label>
-      <div class="history" style="margin-top:8px;">${dots}</div>
-    </div>
-  `;
+  renderPersonView(studentId, 'parent');
 };
 
 // ---- Student View (direct access) ----
@@ -3376,34 +3224,36 @@ window.renderStudentViewSelect = function(){
     return;
   }
   const studentId = sel ? (sel.value || students[0].id) : students[0].id;
-  renderStudentViewForId(studentId);
+  renderPersonView(studentId, 'student');
 };
 
-// ---- Student View ----
+// ---- 학생/학부모 공용 화면 ----
+// role: 'student' (직접 조작 가능) | 'parent' (보기 전용)
 let timerInterval = null;
 let timerSeconds = 0;
 let timerRunning = false;
 let timerSessions = [];
 let currentTimerStudentId = null;
 
-function renderStudentViewForId(studentId){
-  currentTimerStudentId = studentId;
-  const summary = document.getElementById('studentSummary') || document.getElementById('parentSummary');
+function renderPersonView(studentId, role){
+  currentPersonRole = role;
+  const editable = role === 'student';
+  if(editable) currentTimerStudentId = studentId;
+
+  const summary = document.getElementById(role === 'student' ? 'studentSummary' : 'parentSummary');
   const student = students.find(s => s.id === studentId);
+  if(!summary) return;
   if(!student){ summary.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
   const dday = studentDDay[studentId];
   const effectiveDday = (dday && dday.date) ? dday : defaultDDay;
   const ddayLine = ddayText(effectiveDday);
 
-  summary.innerHTML = `
-    <div class="hw-card">
-      <label>📅 숙제·일정 달력</label>
-      <div style="margin-top:10px;">${studentCalendarHtml(studentId)}</div>
-    </div>
+  const roleNoteHtml = editable ? '' : `
+    <div class="settings-desc" style="margin-bottom:14px;">자녀가 기록한 숙제·타이머·D-Day를 확인할 수 있는 화면입니다. (보기 전용)</div>
+  `;
 
-    ${studentCalDayPanelHtml(studentId)}
-
+  const ddayBlockHtml = editable ? `
     <div class="hw-card">
       <label>📆 내 D-Day 설정</label>
       <div class="settings-field" style="margin-top:10px;">
@@ -3415,9 +3265,16 @@ function renderStudentViewForId(studentId){
       <button class="settings-save-btn" style="width:100%; background:var(--good); text-align:center;" onclick="saveMyDday('${studentId}')">D-Day 저장</button>
       ${ddayLine ? `<div class="dday-badge">${ddayLine}</div>` : ''}
     </div>
+  ` : `
+    <div class="hw-card">
+      <label>📆 D-Day</label>
+      ${ddayLine ? `<div class="dday-badge" style="margin-top:10px;">${ddayLine}</div>` : '<div class="sched-empty" style="margin-top:10px;">아직 등록된 D-Day가 없습니다.</div>'}
+    </div>
+  `;
 
-    ${classCommentsForStudentHtml(studentId)}
-
+  let timerBlockHtml;
+  if(editable){
+    timerBlockHtml = `
     <div class="timer-card">
       <div class="hw-label">⏱ 공부 타이머</div>
       <div class="timer-display" id="timerDisplay">00:00:00</div>
@@ -3428,18 +3285,59 @@ function renderStudentViewForId(studentId){
       <div class="timer-log" id="timerLog"></div>
       <div class="session-list" id="sessionList"></div>
     </div>
+    `;
+  } else {
+    const { last7, last14 } = studentStudyTimeSummary(studentId);
+    timerBlockHtml = `
+    <div class="timer-card">
+      <div class="hw-label">⏱ 순공시간</div>
+      <div class="home-stat-row" style="margin-top:12px; margin-bottom:0;">
+        <div class="home-stat">
+          <div class="hs-value">${formatSeconds(last7).slice(0,5)}</div>
+          <div class="hs-label">최근 7일</div>
+        </div>
+        <div class="home-stat">
+          <div class="hs-value">${formatSeconds(last14).slice(0,5)}</div>
+          <div class="hs-label">최근 14일</div>
+        </div>
+      </div>
+    </div>
+    `;
+  }
+
+  const qnaAskId = editable ? 'studentQuestionInput' : 'parentQuestionInput';
+  const qnaAskFn = editable ? `submitPersonQuestion('${studentId}','student')` : `submitPersonQuestion('${studentId}','parent')`;
+  const qnaListId = editable ? 'studentQnaList' : 'parentQnaList';
+
+  summary.innerHTML = `
+    ${roleNoteHtml}
+    <div class="hw-card">
+      <label>📅 날짜별 숙제 확인</label>
+      <div style="margin-top:10px;">${studentDateNavHtml(studentId)}</div>
+    </div>
+
+    ${studentCalDayPanelHtml(studentId, editable)}
+
+    ${ddayBlockHtml}
+
+    ${classCommentsForStudentHtml(studentId)}
+
+    ${timerBlockHtml}
 
     <div class="hw-card">
       <label>💬 질문 Q&A</label>
       <div class="qna-ask-row" style="margin-top:8px;">
-        <textarea id="studentQuestionInput" placeholder="선생님께 궁금한 점을 남겨보세요."></textarea>
-        <button class="qna-answer-btn" onclick="submitStudentQuestion('${studentId}')">등록</button>
+        <textarea id="${qnaAskId}" placeholder="선생님께 궁금한 점을 남겨보세요."></textarea>
+        <button class="qna-answer-btn" onclick="${qnaAskFn}">등록</button>
       </div>
-      <div id="studentQnaList" style="margin-top:12px;">${studentQnaListHtml(studentId)}</div>
+      <div id="${qnaListId}" style="margin-top:12px;">${studentQnaListHtml(studentId)}</div>
     </div>
   `;
-  renderTimerDisplay();
-  renderSessions();
+
+  if(editable){
+    renderTimerDisplay();
+    renderSessions();
+  }
 }
 
 window.saveMyDday = async function(studentId){
@@ -3453,7 +3351,7 @@ window.saveMyDday = async function(studentId){
     delete studentDDay[studentId];
   }
   await saveStudentDDay(studentId);
-  renderStudentViewForId(studentId);
+  renderPersonView(studentId, currentPersonRole);
 };
 
 function escapeHtml(str){
