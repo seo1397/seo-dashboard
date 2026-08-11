@@ -810,6 +810,17 @@
       <button class="settings-save-btn" onclick="saveDefaultDday()">기본 D-Day 저장</button>
       <div class="save-msg" id="defaultDdaySaveMsg"></div>
     </div>
+
+    <div class="settings-card">
+      <h3>📊 월간 내보내기</h3>
+      <div class="settings-desc">선택한 달의 출결·숙제·일정·시험 점수·질문 내역을 엑셀 파일 하나로 내려받습니다.</div>
+      <div class="settings-field">
+        <label>내보낼 달</label>
+        <input id="monthlyExportMonth" type="month">
+      </div>
+      <button class="settings-save-btn" onclick="exportMonthlyExcel()">엑셀로 내보내기</button>
+      <div class="save-msg" id="monthlyExportMsg"></div>
+    </div>
   </div>
 
   <div id="scheduleView" style="display:none;">
@@ -956,6 +967,7 @@
   })();
 </script>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
@@ -1521,6 +1533,8 @@ async function loadTeacherData(){
   document.getElementById('hwInput').value = homeworkByDate[todayKey] || '';
   const noticeInputEl = document.getElementById('noticeInput');
   if(noticeInputEl) noticeInputEl.value = notice;
+  const monthlyExportMonthEl = document.getElementById('monthlyExportMonth');
+  if(monthlyExportMonthEl && !monthlyExportMonthEl.value) monthlyExportMonthEl.value = todayKey.slice(0,7);
   const settingsIdEl = document.getElementById('settingsId');
   if(settingsIdEl && auth && auth.currentUser && auth.currentUser.email){
     settingsIdEl.value = auth.currentUser.email.split('@')[0];
@@ -3397,6 +3411,114 @@ function renderPersonView(studentId, role){
     renderSessions();
   }
 }
+
+// ---- 월간 내보내기 (출결·숙제·일정·시험 점수·질문을 엑셀 한 파일로) ----
+window.exportMonthlyExcel = function(){
+  const msgEl = document.getElementById('monthlyExportMsg');
+  if(typeof XLSX === 'undefined'){
+    if(msgEl) msgEl.textContent = '엑셀 기능을 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침 후 다시 시도해주세요.';
+    return;
+  }
+  const monthInput = document.getElementById('monthlyExportMonth');
+  const ym = (monthInput && monthInput.value) ? monthInput.value : todayKey.slice(0,7); // 'YYYY-MM'
+
+  const nameOf = (id) => { const s = students.find(x => x.id === id); return s ? s.name : id; };
+  const inMonth = (dateStr) => typeof dateStr === 'string' && dateStr.indexOf(ym) === 0;
+
+  // 1. 출결 · 숙제 완료 현황
+  const attRows = [];
+  Object.keys(records).forEach(key => {
+    const idx = key.indexOf(':');
+    const sid = key.slice(0, idx), date = key.slice(idx + 1);
+    if(!inMonth(date)) return;
+    const r = records[key] || {};
+    if(!r.att && !r.hw) return;
+    attRows.push({
+      날짜: date,
+      학생: nameOf(sid),
+      출석: r.att === 'good' ? '출석' : r.att === 'warn' ? '지각/보강' : r.att === 'absent' ? '결석' : '',
+      숙제상태: r.hw === 'good' ? '완료' : r.hw === 'warn' ? '일부완료' : r.hw === 'absent' ? '미완료' : ''
+    });
+  });
+  attRows.sort((a,b) => a.날짜.localeCompare(b.날짜) || a.학생.localeCompare(b.학생));
+
+  // 2. 학생이 직접 적은 숙제
+  const myHwRows = [];
+  Object.keys(studentHwItems).forEach(key => {
+    const idx = key.indexOf(':');
+    const sid = key.slice(0, idx), date = key.slice(idx + 1);
+    if(!inMonth(date)) return;
+    (studentHwItems[key] || []).forEach(item => {
+      myHwRows.push({ 날짜: date, 학생: nameOf(sid), 숙제내용: item.text, 완료: item.done ? 'O' : '' });
+    });
+  });
+  myHwRows.sort((a,b) => a.날짜.localeCompare(b.날짜) || a.학생.localeCompare(b.학생));
+
+  // 3. 선생님이 등록한 숙제 항목 체크
+  const teacherHwRows = [];
+  (homeworkItems || []).filter(it => inMonth(it.date)).forEach(item => {
+    students.forEach(s => {
+      const checked = !!homeworkItemChecks[s.id + ':' + item.id];
+      teacherHwRows.push({ 날짜: item.date, 학생: s.name, 숙제항목: item.text, 완료: checked ? 'O' : '' });
+    });
+  });
+  teacherHwRows.sort((a,b) => a.날짜.localeCompare(b.날짜) || a.학생.localeCompare(b.학생));
+
+  // 4. 날짜별 숙제 공지(전체 텍스트)
+  const hwNoticeRows = Object.keys(homeworkByDate)
+    .filter(inMonth)
+    .sort()
+    .map(date => ({ 날짜: date, 숙제공지: homeworkByDate[date] }));
+
+  // 5. 일정
+  const schedRows = (schedule || [])
+    .filter(ev => inMonth(ev.date))
+    .map(ev => ({
+      날짜: ev.date,
+      대상: ev.studentId === 'all' ? '전체 학생' : nameOf(ev.studentId),
+      종류: schedTypeLabel(ev.type),
+      제목: ev.title
+    }))
+    .sort((a,b) => a.날짜.localeCompare(b.날짜));
+
+  // 6. 시험 점수
+  const scoreRows = (testScores || [])
+    .filter(t => inMonth(t.date))
+    .map(t => ({ 날짜: t.date, 학생: nameOf(t.studentId), 시험명: t.title, 점수: t.score, 만점: t.maxScore }))
+    .sort((a,b) => a.날짜.localeCompare(b.날짜) || a.학생.localeCompare(b.학생));
+
+  // 7. 질문 Q&A (학생 · 학부모)
+  const qnaRows = (questions || [])
+    .filter(q => inMonth(q.date))
+    .map(q => ({
+      날짜: q.date,
+      학생: nameOf(q.studentId),
+      질문자: q.askedBy === 'parent' ? '학부모' : '학생',
+      질문: q.text,
+      답변: q.answer || '',
+      답변일: q.answeredAt || ''
+    }))
+    .sort((a,b) => a.날짜.localeCompare(b.날짜));
+
+  const wb = XLSX.utils.book_new();
+  const addSheet = (rows, name) => {
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 안내: '해당 월에 등록된 내용이 없습니다.' }]);
+    XLSX.utils.book_append_sheet(wb, ws, name);
+  };
+  addSheet(attRows, '출결·숙제현황');
+  addSheet(myHwRows, '학생작성숙제');
+  addSheet(teacherHwRows, '선생님등록숙제');
+  addSheet(hwNoticeRows, '숙제공지');
+  addSheet(schedRows, '일정');
+  addSheet(scoreRows, '시험점수');
+  addSheet(qnaRows, '질문Q&A');
+
+  XLSX.writeFile(wb, `이너리더_${ym}.xlsx`);
+  if(msgEl){
+    msgEl.textContent = `${ym} 내역을 엑셀로 내려받았습니다.`;
+    setTimeout(() => { msgEl.textContent = ''; }, 3000);
+  }
+};
 
 window.saveMyDday = async function(studentId){
   const titleEl = document.getElementById('myDdayTitle_' + studentId);
