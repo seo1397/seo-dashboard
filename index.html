@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=공.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>출결부 — 수학 클래스 관리</title>
 
 <!-- PWA: 홈 화면에 앱처럼 설치하기 위한 설정 -->
@@ -1140,6 +1140,27 @@ async function loginIndexDelete(loginId){
   catch(e){ return false; }
 }
 
+// ---- 자동로그인 (로그아웃 전까지 유지) ----
+// 학생/학부모: 앱 자체 로그인(아이디/비밀번호)이라 브라우저에 어떤 학생·역할로
+// 로그인했는지를 저장해뒀다가, 다음 접속 때 자동으로 같은 화면으로 들어가게 합니다.
+// 원장님(관리자): Firebase Authentication 세션이 브라우저에 자동으로 유지되므로
+// 별도 저장 없이 auth.onAuthStateChanged로 로그인 여부만 확인하면 됩니다.
+const AUTO_LOGIN_KEY = 'innerleader_autologin';
+function saveAutoLogin(role, studentId){
+  try{ localStorage.setItem(AUTO_LOGIN_KEY, JSON.stringify({ role, studentId })); }
+  catch(e){ console.error('자동로그인 정보 저장 오류:', e); }
+}
+function getAutoLogin(){
+  try{
+    const raw = localStorage.getItem(AUTO_LOGIN_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch(e){ return null; }
+}
+function clearAutoLogin(){
+  try{ localStorage.removeItem(AUTO_LOGIN_KEY); }
+  catch(e){ console.error('자동로그인 정보 삭제 오류:', e); }
+}
+
 // 현재 메모리에 있는 데이터에서 특정 학생 한 명의 몫만 뽑아 "공개용 스냅샷"을 만듭니다.
 // (원장님 모드에서는 students 배열 전체를 순회해 모든 학생 몫을 만들고,
 //  학생/학부모 잠긴 모드에서는 students 배열에 이미 자기 자신 한 명만 들어있으므로
@@ -1399,6 +1420,45 @@ async function loadAll(){
     return;
   }
 
+  // ---- 자동로그인 시도 ----
+  // 1) 학생/학부모: 저장된 자동로그인 정보가 있으면 아이디/비밀번호 없이 바로 입장
+  const auto = getAutoLogin();
+  if(auto && auto.studentId && (auto.role === 'student' || auto.role === 'parent')){
+    if(auth){
+      try{ await auth.signInAnonymously(); }
+      catch(e){ console.error('학생/학부모 익명 로그인 오류:', e); }
+    }
+    let snap = null;
+    try{ snap = await publicDocGet(auto.studentId); }catch(e){ snap = null; }
+    if(snap){
+      lockedStudentId = auto.studentId;
+      lockedRole = auto.role;
+      await loadLockedStudentData();
+      return;
+    } else {
+      // 학생 계정이 삭제되는 등 더 이상 유효하지 않으면 자동로그인 정보를 지웁니다.
+      clearAutoLogin();
+    }
+  }
+
+  // 2) 원장님(관리자): Firebase 로그인 세션이 브라우저에 남아있으면 자동으로 입장
+  if(auth){
+    let handled = false;
+    await new Promise((resolve) => {
+      const unsub = auth.onAuthStateChanged((user) => {
+        if(handled) return;
+        handled = true;
+        unsub();
+        if(user && !user.isAnonymous){
+          enterApp().then(resolve);
+        } else {
+          resolve();
+        }
+      });
+    });
+    if(document.getElementById('appShell').style.display === 'flex') return;
+  }
+
   // 원장님 데이터는 로그인 전에는 아예 요청하지 않습니다 (로그인 화면만 먼저 보여줍니다).
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('appShell').style.display = 'none';
@@ -1598,6 +1658,7 @@ function applyLockedView(){
 }
 
 window.handleAccessLogout = function(){
+  clearAutoLogin();
   lockedStudentId = null;
   lockedRole = 'parent';
   students = [];
@@ -3235,10 +3296,12 @@ window.handleAccessLogin = async function(){
   lockedRole = entry.role;
   idEl.value = '';
   pwEl.value = '';
+  saveAutoLogin(entry.role, entry.studentId);
   await loadLockedStudentData();
 };
 
 window.handleTeacherLogout = function(){
+  clearAutoLogin();
   if(auth) auth.signOut().catch(e => console.error('로그아웃 오류:', e));
   document.getElementById('appShell').style.display = 'none';
   document.getElementById('loginScreen').style.display = 'flex';
