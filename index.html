@@ -225,23 +225,6 @@
   .hw-self-btn.active.warn{ background:var(--warn-bg); border-color:var(--warn); color:var(--warn); }
   .hw-self-btn.active.absent{ background:var(--absent-bg); border-color:var(--absent); color:var(--absent); }
 
-  .timer-card{ background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:20px 18px; margin-bottom:14px; text-align:center; }
-  .timer-display{ font-size:52px; font-weight:900; letter-spacing:-0.03em; color:var(--ink); font-variant-numeric:tabular-nums; margin:12px 0; }
-  .timer-display.running{ color:#4A8FB5; }
-  .timer-btns{ display:flex; gap:8px; justify-content:center; margin-top:4px; }
-  .timer-btn{
-    border:none; border-radius:10px; padding:11px 22px; font-size:14px; font-weight:700;
-    cursor:pointer; font-family:inherit;
-  }
-  .timer-btn.start{ background:#4A8FB5; color:#fff; }
-  .timer-btn.stop{ background:#E5E3DC; color:var(--ink); }
-  .timer-btn.reset{ background:#EFEDE6; color:var(--ink-soft); }
-  .timer-log{ font-size:12px; color:var(--ink-soft); margin-top:10px; min-height:18px; }
-  .session-list{ margin-top:12px; text-align:left; }
-  .session-item{ font-size:12.5px; color:var(--ink-soft); padding:4px 0; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; }
-  .session-item:last-child{ border-bottom:none; }
-  .total-time{ font-size:13px; font-weight:700; color:var(--ink); margin-top:8px; text-align:right; }
-
   .menu-section-label{ font-size:12.5px; font-weight:700; color:var(--ink-soft); margin:18px 4px 10px; display:flex; align-items:center; gap:6px; }
   .menu-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
   .menu-card{
@@ -656,7 +639,7 @@
       <div class="qa-card" onclick="setMode('student')">
         <div class="qa-icon c7">🎓</div>
         <div class="qa-title">학생 전용 앱</div>
-        <div class="qa-desc">숙제 체크 · 공부 타이머</div>
+        <div class="qa-desc">숙제 체크</div>
       </div>
       <div class="qa-card disabled">
         <div class="qa-icon c4">📐</div>
@@ -1547,7 +1530,7 @@ async function loadTeacherData(){
     classComments = cc ? JSON.parse(cc.value) : [];
   }catch(e){ classComments = []; }
 
-  // 학생이 스스로 남긴 기록(숙제 체크, 공부 타이머, 질문)은
+  // 학생이 스스로 남긴 기록(숙제 체크, 질문)은
   // student_public 문서에서 가져와 원장님 화면에 반영합니다.
   // (학생/학부모는 innerleader_data에 쓸 수 없도록 막혀 있으므로,
   //  자기 스스로 남긴 기록은 student_public에만 저장되어 있습니다.)
@@ -2228,33 +2211,6 @@ function studentCalDayPanelHtml(studentId, roleEditable){
   `;
 }
 
-// ---- Study time (순공시간) ----
-async function saveStudyTime(studentId){
-  try{
-    const r = await window.storage.set('studyTime', JSON.stringify(studyTimeByDate), true);
-    if(!r) console.error('studyTime 저장 실패: storage.set returned null');
-  }catch(e){ console.error('studyTime 저장 오류:', e); }
-  if(studentId) await syncStudentPublic(studentId); else await syncAllStudentsPublic();
-}
-
-async function addStudyTime(studentId, secs){
-  if(!studentId || !secs) return;
-  const key = studentId + ':' + todayKey;
-  studyTimeByDate[key] = (studyTimeByDate[key] || 0) + secs;
-  await saveStudyTime(studentId);
-}
-
-function studentStudyTimeSummary(studentId){
-  const dates = last14Dates();
-  let last7 = 0, last14 = 0;
-  dates.forEach((d, i) => {
-    const secs = studyTimeByDate[studentId + ':' + d] || 0;
-    last14 += secs;
-    if(i >= 7) last7 += secs; // last 7 entries in a 14-day array (index 7~13) are the most recent 7 days
-  });
-  return { last7, last14 };
-}
-
 // ---- Progress notes (진도) ----
 async function saveProgress(studentId){
   try{
@@ -2449,8 +2405,6 @@ function renderPlannerForStudent(studentId){
   if(!content) return;
   if(!student){ content.innerHTML = '<div class="empty">학생 정보를 찾을 수 없습니다.</div>'; return; }
 
-  const { last7 } = studentStudyTimeSummary(studentId);
-  const todaySecs = studyTimeByDate[studentId + ':' + todayKey] || 0;
   const todayPlans = planEntries.filter(p => p.studentId === studentId && p.date === todayKey);
   const todayDone = todayPlans.filter(p => p.done).length;
 
@@ -2479,7 +2433,6 @@ function renderPlannerForStudent(studentId){
     <div class="settings-card">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
         <div>
-          <div class="planner-stat-row">⏱️ 오늘 순공: <b>${formatSeconds(todaySecs)}</b></div>
           <div class="planner-stat-row">✅ 오늘 달성률: <b>${todayDone} / ${todayPlans.length}</b></div>
         </div>
         <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
@@ -3364,16 +3317,10 @@ window.renderStudentViewSelect = function(){
 
 // ---- 학생/학부모 공용 화면 ----
 // role: 'student' (직접 조작 가능) | 'parent' (보기 전용)
-let timerInterval = null;
-let timerSeconds = 0;
-let timerRunning = false;
-let timerSessions = [];
-let currentTimerStudentId = null;
 
 function renderPersonView(studentId, role){
   currentPersonRole = role;
   const editable = role === 'student';
-  if(editable) currentTimerStudentId = studentId;
 
   const summary = document.getElementById(role === 'student' ? 'studentSummary' : 'parentSummary');
   const student = students.find(s => s.id === studentId);
@@ -3385,7 +3332,7 @@ function renderPersonView(studentId, role){
   const ddayLine = ddayText(effectiveDday);
 
   const roleNoteHtml = editable ? '' : `
-    <div class="settings-desc" style="margin-bottom:14px;">자녀가 기록한 숙제·타이머·D-Day를 확인할 수 있는 화면입니다. (보기 전용)</div>
+    <div class="settings-desc" style="margin-bottom:14px;">자녀가 기록한 숙제·D-Day를 확인할 수 있는 화면입니다. (보기 전용)</div>
   `;
 
   const ddayBlockHtml = editable ? `
@@ -3407,39 +3354,6 @@ function renderPersonView(studentId, role){
     </div>
   `;
 
-  let timerBlockHtml;
-  if(editable){
-    timerBlockHtml = `
-    <div class="timer-card">
-      <div class="hw-label">⏱ 공부 타이머</div>
-      <div class="timer-display" id="timerDisplay">00:00:00</div>
-      <div class="timer-btns">
-        <button class="timer-btn start" id="timerStartBtn" onclick="timerToggle()">시작</button>
-        <button class="timer-btn reset" onclick="timerReset()">초기화</button>
-      </div>
-      <div class="timer-log" id="timerLog"></div>
-      <div class="session-list" id="sessionList"></div>
-    </div>
-    `;
-  } else {
-    const { last7, last14 } = studentStudyTimeSummary(studentId);
-    timerBlockHtml = `
-    <div class="timer-card">
-      <div class="hw-label">⏱ 순공시간</div>
-      <div class="home-stat-row" style="margin-top:12px; margin-bottom:0;">
-        <div class="home-stat">
-          <div class="hs-value">${formatSeconds(last7).slice(0,5)}</div>
-          <div class="hs-label">최근 7일</div>
-        </div>
-        <div class="home-stat">
-          <div class="hs-value">${formatSeconds(last14).slice(0,5)}</div>
-          <div class="hs-label">최근 14일</div>
-        </div>
-      </div>
-    </div>
-    `;
-  }
-
   const qnaAskId = editable ? 'studentQuestionInput' : 'parentQuestionInput';
   const qnaAskFn = editable ? `submitPersonQuestion('${studentId}','student')` : `submitPersonQuestion('${studentId}','parent')`;
   const qnaListId = editable ? 'studentQnaList' : 'parentQnaList';
@@ -3457,8 +3371,6 @@ function renderPersonView(studentId, role){
 
     ${classCommentsForStudentHtml(studentId)}
 
-    ${timerBlockHtml}
-
     <div class="hw-card">
       <label>💬 질문 Q&A</label>
       <div class="qna-ask-row" style="margin-top:8px;">
@@ -3468,11 +3380,6 @@ function renderPersonView(studentId, role){
       <div id="${qnaListId}" style="margin-top:12px;">${studentQnaListHtml(studentId)}</div>
     </div>
   `;
-
-  if(editable){
-    renderTimerDisplay();
-    renderSessions();
-  }
 }
 
 // ---- 월간 내보내기 (출결·숙제·일정·시험 점수·질문을 엑셀 한 파일로) ----
@@ -3604,55 +3511,6 @@ function escapeHtml(str){
 }
 
 function pad(n){ return String(n).padStart(2,'0'); }
-function formatSeconds(s){ return `${pad(Math.floor(s/3600))}:${pad(Math.floor((s%3600)/60))}:${pad(s%60)}`; }
-
-function renderTimerDisplay(){
-  const el = document.getElementById('timerDisplay');
-  if(!el) return;
-  el.textContent = formatSeconds(timerSeconds);
-  el.className = 'timer-display' + (timerRunning ? ' running' : '');
-  const btn = document.getElementById('timerStartBtn');
-  if(btn) btn.textContent = timerRunning ? '일시정지' : (timerSeconds > 0 ? '계속' : '시작');
-}
-
-function renderSessions(){
-  const el = document.getElementById('sessionList');
-  if(!el || timerSessions.length === 0) return;
-  const total = timerSessions.reduce((a,b)=>a+b.secs,0);
-  el.innerHTML = timerSessions.map((s,i)=>`
-    <div class="session-item"><span>세션 ${i+1}</span><span>${formatSeconds(s.secs)}</span></div>
-  `).join('') + `<div class="total-time">오늘 총 공부시간: ${formatSeconds(total)}</div>`;
-}
-
-window.timerToggle = function(){
-  if(timerRunning){
-    clearInterval(timerInterval);
-    timerRunning = false;
-    if(timerSeconds > 0){
-      timerSessions.push({ secs: timerSeconds });
-      addStudyTime(currentTimerStudentId, timerSeconds);
-    }
-    timerSeconds = 0;
-  } else {
-    timerRunning = true;
-    timerSeconds = 0;
-    timerInterval = setInterval(()=>{
-      timerSeconds++;
-      renderTimerDisplay();
-    }, 1000);
-  }
-  renderTimerDisplay();
-  renderSessions();
-};
-
-window.timerReset = function(){
-  clearInterval(timerInterval);
-  timerRunning = false;
-  timerSeconds = 0;
-  timerSessions = [];
-  renderTimerDisplay();
-  renderSessions();
-};
 
 function showToast(msg){
   const t = document.getElementById('toast');
