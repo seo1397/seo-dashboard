@@ -2578,21 +2578,67 @@ window.submitPersonQuestion = async function(studentId, askedBy){
   renderPersonView(studentId, askedBy);
 };
 
-function studentQnaListHtml(studentId){
-  const mine = questions.filter(q => q.studentId === studentId).sort((a,b) => b.date.localeCompare(a.date));
+function studentQnaListHtml(studentId, viewerRole){
+  // 학생 화면에서는 학부모가 남긴 상담글이 보이지 않도록 걸러내고,
+  // 학부모 화면에서는 학생 질문 + 학부모 상담글을 모두 볼 수 있게 합니다.
+  const visible = questions.filter(q => q.studentId === studentId && (viewerRole === 'parent' || q.askedBy === 'student'));
+  const mine = visible.sort((a,b) => b.date.localeCompare(a.date));
   if(mine.length === 0) return '<div class="sched-empty">아직 남긴 질문이 없습니다.</div>';
-  return mine.map(q => `
+  return mine.map(q => {
+    const isMine = q.askedBy === viewerRole; // 지금 보고 있는 본인이 직접 남긴 질문인지
+    const editControls = isMine ? `
+      <div style="margin-top:8px; display:flex; gap:12px;">
+        <span class="qna-edit-link" onclick="startEditMyQuestion('${q.id}')">수정</span>
+        <span class="qna-edit-link" onclick="deleteMyQuestion('${q.id}','${studentId}')">삭제</span>
+      </div>
+    ` : '';
+    return `
     <div class="qna-item">
       <div class="qna-top">
         <span class="qna-asker">${q.askedBy === 'parent' ? '👨‍👩‍👧 학부모 상담' : '🙋 학생 질문'}</span>
         <span class="qna-date">${q.date}</span>
       </div>
       <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
-      <div class="qna-question">${q.text}</div>
+      <div class="qna-question" id="qnaQuestionText_${q.id}">${q.text}</div>
       ${q.answer ? `<div class="qna-answer-display">👩‍🏫 ${q.answer}</div>` : ''}
+      ${editControls}
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
+
+window.startEditMyQuestion = function(id){
+  const q = questions.find(x => x.id === id);
+  if(!q) return;
+  const el = document.getElementById('qnaQuestionText_' + id);
+  if(!el) return;
+  el.outerHTML = `
+    <div class="qna-answer-box" id="qnaQuestionText_${id}">
+      <textarea id="qnaEditInput_${id}">${q.text}</textarea>
+      <button class="qna-answer-btn" onclick="saveMyQuestionEdit('${id}','${q.studentId}')">저장</button>
+    </div>
+  `;
+};
+
+window.saveMyQuestionEdit = async function(id, studentId){
+  const input = document.getElementById('qnaEditInput_' + id);
+  if(!input) return;
+  const text = input.value.trim();
+  if(!text) return;
+  const q = questions.find(x => x.id === id);
+  if(!q) return;
+  q.text = text;
+  await saveQuestions(studentId);
+  renderPersonView(studentId, currentPersonRole);
+};
+
+window.deleteMyQuestion = async function(id, studentId){
+  if(!confirm('이 질문을 삭제할까요?')) return;
+  questions = questions.filter(x => x.id !== id);
+  await saveQuestions(studentId);
+  updateQnaBadges();
+  renderPersonView(studentId, currentPersonRole);
+};
 
 window.renderQnaTeacherList = function(){
   const list = document.getElementById('qnaTeacherList');
@@ -2618,9 +2664,14 @@ window.renderQnaTeacherList = function(){
     return `
       <div class="qna-item">
         <div class="qna-top">
-          <span class="qna-student">${who}</span>
-          <span class="qna-asker">${q.askedBy === 'parent' ? '👨‍👩‍👧 학부모' : '🙋 학생'}</span>
-          <span class="qna-date">${q.date}</span>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span class="qna-student">${who}</span>
+            <span class="qna-asker">${q.askedBy === 'parent' ? '👨‍👩‍👧 학부모' : '🙋 학생'}</span>
+          </div>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <span class="qna-date">${q.date}</span>
+            <span class="sched-del" onclick="deleteQuestion('${q.id}')">삭제</span>
+          </div>
         </div>
         <div class="qna-status ${q.answer ? 'answered' : 'pending'}">${q.answer ? '답변 완료' : '답변 대기중'}</div>
         <div class="qna-question">${q.text}</div>
@@ -2628,6 +2679,15 @@ window.renderQnaTeacherList = function(){
       </div>
     `;
   }).join('');
+};
+
+window.deleteQuestion = async function(id){
+  if(!confirm('이 질문을 삭제할까요? 답변도 함께 삭제됩니다.')) return;
+  const q = questions.find(x => x.id === id);
+  questions = questions.filter(x => x.id !== id);
+  await saveQuestions(q ? q.studentId : undefined);
+  updateQnaBadges();
+  window.renderQnaTeacherList();
 };
 
 window.startEditAnswer = function(id){
@@ -3419,7 +3479,7 @@ function renderPersonView(studentId, role){
         <textarea id="${qnaAskId}" placeholder="선생님께 궁금한 점을 남겨보세요."></textarea>
         <button class="qna-answer-btn" onclick="${qnaAskFn}">등록</button>
       </div>
-      <div id="${qnaListId}" style="margin-top:12px;">${studentQnaListHtml(studentId)}</div>
+      <div id="${qnaListId}" style="margin-top:12px;">${studentQnaListHtml(studentId, role)}</div>
     </div>
   `;
 }
